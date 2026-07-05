@@ -1,6 +1,7 @@
 # AML / KYT Screening
 
 ![CI](https://github.com/ai-crypto-onramp/aml-kyt-screening/actions/workflows/ci.yml/badge.svg)
+[![codecov](https://codecov.io/gh/ai-crypto-onramp/aml-kyt-screening/branch/main/graph/badge.svg)](https://codecov.io/gh/ai-crypto-onramp/aml-kyt-screening)
 
 Pre-settlement Know-Your-Transaction checks against destination addresses (Chainalysis/TRM); blocks tainted flows before broadcast.
 
