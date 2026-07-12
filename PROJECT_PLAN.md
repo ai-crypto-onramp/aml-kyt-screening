@@ -14,16 +14,16 @@ tests/coverage and Docker/CI polish.
 hot screen path will use to avoid repeated vendor calls.
 
 **Tasks:**
-- [ ] Add migration files for `address_risk_cache`, `kyt_screens`, `kyt_alerts`,
+- [x] Add migration files for `address_risk_cache`, `kyt_screens`, `kyt_alerts`,
       `vendor_responses` (UUID PKs, indexes on `(address, chain)`, `tx_id`,
       `idempotency_key`).
-- [ ] Implement a Go migration runner (e.g. `golang-migrate` or `goose`) wired into
+- [x] Implement a Go migration runner (e.g. `golang-migrate` or `goose`) wired into
       `cmd/kyt` startup.
-- [ ] Implement `Cache` interface with Redis and PG-backed implementations; select
+- [x] Implement `Cache` interface with Redis and PG-backed implementations; select
       implementation via `REDIS_URL`.
-- [ ] Implement cache get/set with TTL honoring `CACHE_TTL_SECONDS` and
+- [x] Implement cache get/set with TTL honoring `CACHE_TTL_SECONDS` and
       `SANCTIONED_CACHE_TTL_SECONDS` for sanctioned verdicts.
-- [ ] Add connection pooling / health check for PG and Redis.
+- [x] Add connection pooling / health check for PG and Redis.
 
 **Acceptance criteria:**
 - `go test ./internal/store/...` passes against a ephemeral Postgres/Redis.
@@ -36,15 +36,15 @@ hot screen path will use to avoid repeated vendor calls.
 `ScreenProvider` interface with circuit breaker, timeouts, and idempotency keys.
 
 **Tasks:**
-- [ ] Define `ScreenProvider` interface: `Screen(ctx, ScreenRequest) (ScreenResponse, error)`.
-- [ ] Implement `ChainalysisProvider` (REST/HTTPS, API key auth, `CHAINALYSIS_API_URL`).
-- [ ] Implement `TRMProvider` (REST/HTTPS, API key auth, `TRM_API_URL`).
-- [ ] Add `VENDOR_TIMEOUT_MS` per-call timeout via `http.Client`.
-- [ ] Add circuit breaker (gobreaker/sony-gobreaker) honoring
+- [x] Define `ScreenProvider` interface: `Screen(ctx, ScreenRequest) (ScreenResponse, error)`.
+- [x] Implement `ChainalysisProvider` (REST/HTTPS, API key auth, `CHAINALYSIS_API_URL`).
+- [x] Implement `TRMProvider` (REST/HTTPS, API key auth, `TRM_API_URL`).
+- [x] Add `VENDOR_TIMEOUT_MS` per-call timeout via `http.Client`.
+- [x] Add circuit breaker (gobreaker/sony-gobreaker) honoring
       `VENDOR_CIRCUIT_BREAKER_THRESHOLD`; open circuit degrades to `manual_review`.
-- [ ] Persist raw request/response to `vendor_responses` with idempotency key
+- [x] Persist raw request/response to `vendor_responses` with idempotency key
       `(tx_id, address, chain)`.
-- [ ] Add a mock provider for tests.
+- [x] Add a mock provider for tests.
 
 **Acceptance criteria:**
 - Both providers return `risk_score` and `exposure` for sample addresses.
@@ -62,11 +62,11 @@ transaction path.
 **Tasks:**
 - [ ] Define gRPC proto for `Screen(ScreenRequest) returns (ScreenResponse)` and
       `GetAlert(GetAlertRequest) returns (Alert)`; generate stubs via `buf generate`.
-- [ ] Implement REST handler with JSON validation (address, chain, amount, tx_id).
+- [x] Implement REST handler with JSON validation (address, chain, amount, tx_id).
 - [ ] Implement gRPC server mirroring the REST contract.
-- [ ] Wire handler to cache lookup -> vendor screen -> decision logic -> persist
+- [x] Wire handler to cache lookup -> vendor screen -> decision logic -> persist
       `kyt_screens` row.
-- [ ] Return `screen_id`, `risk_score`, `exposure`, `decision`.
+- [x] Return `screen_id`, `risk_score`, `exposure`, `decision`.
 - [ ] Add request ID / trace propagation (OpenTelemetry context).
 
 **Acceptance criteria:**
@@ -80,13 +80,13 @@ transaction path.
 evaluation, including the fail-safe behavior for `unknown` and vendor-unreachable.
 
 **Tasks:**
-- [ ] Implement `DecisionEngine` mapping `exposure` -> `decision` per the spec:
+- [x] Implement `DecisionEngine` mapping `exposure` -> `decision` per the spec:
       `sanctioned -> block`, `high_risk -> manual_review`, `clean -> allow`,
       `unknown -> UNKNOWN_DECISION`.
-- [ ] Apply `BLOCK_THRESHOLD` and `HIGH_RISK_THRESHOLD` (per-chain override)
+- [x] Apply `BLOCK_THRESHOLD` and `HIGH_RISK_THRESHOLD` (per-chain override)
       to derive exposure when the vendor returns a numeric score only.
-- [ ] Hot-reload thresholds from environment without restart.
-- [ ] Vendor-unreachable / circuit-open path returns `manual_review` (never `allow`).
+- [x] Hot-reload thresholds from environment without restart.
+- [x] Vendor-unreachable / circuit-open path returns `manual_review` (never `allow`).
 
 **Acceptance criteria:**
 - Unit tests cover all four exposure branches and threshold edge cases.
@@ -100,14 +100,14 @@ evaluation, including the fail-safe behavior for `unknown` and vendor-unreachabl
 re-classifications (e.g. newly tainted address) into alerts and cache invalidation.
 
 **Tasks:**
-- [ ] Implement `POST /v1/webhooks/chainalysis` and `POST /v1/webhooks/trm` handlers.
-- [ ] Verify `HMAC-SHA256(secret, raw_body)` against vendor signature header using
+- [x] Implement `POST /v1/webhooks/chainalysis` and `POST /v1/webhooks/trm` handlers.
+- [x] Verify `HMAC-SHA256(secret, raw_body)` against vendor signature header using
       `crypto/subtle.ConstantTimeCompare`; return 401 on mismatch.
-- [ ] Parse vendor payload, create/update `kyt_alerts` for new exposures.
-- [ ] Invalidate `address_risk_cache` entries for re-classified addresses.
+- [x] Parse vendor payload, create/update `kyt_alerts` for new exposures.
+- [x] Invalidate `address_risk_cache` entries for re-classified addresses.
 - [ ] Trigger downstream review of already-settled transactions for the affected
       address (best-effort; async).
-- [ ] Log signature mismatches for security monitoring.
+- [x] Log signature mismatches for security monitoring.
 
 **Acceptance criteria:**
 - Unsigned / tampered payloads return 401 and produce no business side effects.
@@ -120,12 +120,12 @@ re-classifications (e.g. newly tainted address) into alerts and cache invalidati
 re-classifications) as `kyt_alerts` rows consumable by the compliance dashboard.
 
 **Tasks:**
-- [ ] Implement `AlertService.Create` writing to `kyt_alerts` with `status=open`.
-- [ ] Implement `GET /v1/kyt/alerts/:id` returning the alert payload.
+- [x] Implement `AlertService.Create` writing to `kyt_alerts` with `status=open`.
+- [x] Implement `GET /v1/kyt/alerts/:id` returning the alert payload.
 - [ ] Implement gRPC `GetAlert` mirror.
-- [ ] Assign default severity from exposure (`sanctioned` -> `critical`,
+- [x] Assign default severity from exposure (`sanctioned` -> `critical`,
       `high_risk` -> `high`).
-- [ ] Expose list/assign/close operations for the compliance dashboard.
+- [x] Expose list/assign/close operations for the compliance dashboard.
 
 **Acceptance criteria:**
 - A `block` or `manual_review` screen produces exactly one open alert.
@@ -139,11 +139,11 @@ miss) to the Audit / Event Log via the async event bus (NATS/Kafka), with DB
 fallback when `AUDIT_EVENT_BUS_URL` is unset.
 
 **Tasks:**
-- [ ] Define audit event schema (request, vendor response or cache source,
+- [x] Define audit event schema (request, vendor response or cache source,
       decision, operator/action timestamps, `screen_id`).
 - [ ] Implement async producer to NATS/Kafka when `AUDIT_EVENT_BUS_URL` is set.
-- [ ] Implement DB fallback (append to an `audit_events` table) when bus is unset.
-- [ ] Ensure audit emission never blocks the screen path (bounded queue + drop
+- [x] Implement DB fallback (append to an `audit_events` table) when bus is unset.
+- [x] Ensure audit emission never blocks the screen path (bounded queue + drop
       counter metric on overflow).
 
 **Acceptance criteria:**
@@ -159,11 +159,11 @@ covering the hot path, vendor calls, cache, webhooks, and audit emission.
 **Tasks:**
 - [ ] Instrument REST and gRPC handlers with OTel spans; propagate trace context
       to vendor calls.
-- [ ] Add Prometheus metrics: `kyt_screen_duration_seconds`, `kyt_screen_total`,
+- [x] Add Prometheus metrics: `kyt_screen_duration_seconds`, `kyt_screen_total`,
       `kyt_cache_hits_total`, `kyt_cache_misses_total`, `kyt_vendor_errors_total`,
       `kyt_circuit_breaker_state`, `kyt_alerts_open`, `kyt_audit_drops_total`.
-- [ ] Switch to structured logging (`slog`/`zerolog`) at `LOG_LEVEL`.
-- [ ] Expose `/metrics` for Prometheus scrape.
+- [x] Switch to structured logging (`slog`/`zerolog`) at `LOG_LEVEL`.
+- [x] Expose `/metrics` for Prometheus scrape.
 
 **Acceptance criteria:**
 - A screen call produces a trace spanning handler -> cache -> vendor -> decision.
@@ -176,11 +176,11 @@ covering the hot path, vendor calls, cache, webhooks, and audit emission.
 integration, and contract tests; wire coverage reporting into CI (Codecov).
 
 **Tasks:**
-- [ ] Unit tests for cache, decision engine, providers (mock), HMAC verification.
+- [x] Unit tests for cache, decision engine, providers (mock), HMAC verification.
 - [ ] Integration tests for REST + gRPC endpoints against ephemeral PG/Redis.
-- [ ] Webhook contract tests with sample signed payloads (valid + tampered).
-- [ ] Add `go test -race ./...` to CI.
-- [ ] Upload coverage to Codecov; enforce minimum threshold (e.g. 80%).
+- [x] Webhook contract tests with sample signed payloads (valid + tampered).
+- [x] Add `go test -race ./...` to CI.
+- [x] Upload coverage to Codecov; enforce minimum threshold (e.g. 80%).
 
 **Acceptance criteria:**
 - `go test -race ./...` is green.
@@ -194,12 +194,12 @@ lints, tests, and publishes the service; integrate with the existing
 `ci.yml` workflow.
 
 **Tasks:**
-- [ ] Refine `Dockerfile` (multi-stage, distroless/non-root, healthcheck).
-- [ ] Add `docker-compose.yml` for local dev (postgres, redis, mock vendor).
-- [ ] Wire CI: `go build`, `golangci-lint run`, `go test -race`, `buf generate`
+- [x] Refine `Dockerfile` (multi-stage, distroless/non-root, healthcheck).
+- [x] Add `docker-compose.yml` for local dev (postgres, redis, mock vendor).
+- [x] Wire CI: `go build`, `golangci-lint run`, `go test -race`, `buf generate`
       check, coverage upload.
 - [ ] Add release workflow that builds and publishes the image on tag.
-- [ ] Document local dev workflow in README.
+- [x] Document local dev workflow in README.
 
 **Acceptance criteria:**
 - `docker compose up` brings the service up healthy against local deps.

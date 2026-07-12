@@ -1,13 +1,13 @@
-.PHONY: build test run lint docker-build docker-run clean
+.PHONY: build test run lint docker-build docker-run clean migrate-up migrate-down
 
 build:
-	go build -o bin/server .
+	go build -o bin/server ./cmd/kyt
 
 test:
 	go test ./... -race -coverprofile=coverage.out -coverpkg=./...
 
 run:
-	go run .
+	go run ./cmd/kyt
 
 lint:
 	go vet ./...

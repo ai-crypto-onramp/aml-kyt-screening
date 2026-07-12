@@ -230,13 +230,18 @@ go build ./...
 go run ./cmd/kyt
 
 # Run tests
-go test ./...
+go test ./... -race -cover
 
 # Run linter
-golangci-lint run
+go vet ./...
 
-# Generate gRPC stubs
-buf generate
+# Bring up Postgres + Redis + the service
+docker compose up
+
+# Apply / roll back DB migrations
+DB_URL=postgres://kyt:kyt@localhost:5432/kyt?sslmode=disable go run ./cmd/kyt
 ```
 
-Service-specific dev scripts (docker-compose, seed data, mock vendor) — TODO.
+When `DB_URL` is unset the service boots in a degraded in-memory mode
+suitable for local development without external dependencies. Production
+deployments must set `DB_URL`.

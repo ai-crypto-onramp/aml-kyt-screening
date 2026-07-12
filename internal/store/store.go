@@ -14,26 +14,30 @@ import (
 
 // Config holds the store/cache configuration read from the environment.
 type Config struct {
-	DBURL                 string
-	RedisURL              string
-	CacheTTL              time.Duration
-	SanctionedCacheTTL    time.Duration
-	MaxOpenConns          int
-	MaxIdleConns          int
-	ConnMaxLifetime       time.Duration
+	DBURL                   string
+	RedisURL                string
+	CacheTTL                time.Duration
+	SanctionedCacheTTL      time.Duration
+	MaxOpenConns            int
+	MaxIdleConns            int
+	ConnMaxLifetime         time.Duration
+	VendorTimeout           time.Duration
+	CircuitBreakerThreshold int
 }
 
 // LoadConfig reads store configuration from environment variables using the
 // defaults documented in README.md.
 func LoadConfig() Config {
 	cfg := Config{
-		DBURL:              os.Getenv("DB_URL"),
-		RedisURL:           os.Getenv("REDIS_URL"),
-		CacheTTL:           envDuration("CACHE_TTL_SECONDS", 3600*time.Second),
-		SanctionedCacheTTL: envDuration("SANCTIONED_CACHE_TTL_SECONDS", 604800*time.Second),
-		MaxOpenConns:       envInt("DB_MAX_OPEN_CONNS", 25),
-		MaxIdleConns:       envInt("DB_MAX_IDLE_CONNS", 5),
-		ConnMaxLifetime:    envDuration("DB_CONN_MAX_LIFETIME_SECONDS", 300*time.Second),
+		DBURL:                   os.Getenv("DB_URL"),
+		RedisURL:                os.Getenv("REDIS_URL"),
+		CacheTTL:                envDuration("CACHE_TTL_SECONDS", 3600*time.Second),
+		SanctionedCacheTTL:      envDuration("SANCTIONED_CACHE_TTL_SECONDS", 604800*time.Second),
+		MaxOpenConns:            envInt("DB_MAX_OPEN_CONNS", 25),
+		MaxIdleConns:            envInt("DB_MAX_IDLE_CONNS", 5),
+		ConnMaxLifetime:         envDuration("DB_CONN_MAX_LIFETIME_SECONDS", 300*time.Second),
+		VendorTimeout:           envMillis("VENDOR_TIMEOUT_MS", 800*time.Millisecond),
+		CircuitBreakerThreshold: envInt("VENDOR_CIRCUIT_BREAKER_THRESHOLD", 5),
 	}
 	return cfg
 }
@@ -133,4 +137,14 @@ func parseSeconds(s string) (time.Duration, error) {
 		return 0, err
 	}
 	return time.Duration(n) * time.Second, nil
+}
+
+func envMillis(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil {
+			return time.Duration(n) * time.Millisecond
+		}
+	}
+	return def
 }
