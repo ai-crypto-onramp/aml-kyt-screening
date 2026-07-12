@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS address_risk_cache;
