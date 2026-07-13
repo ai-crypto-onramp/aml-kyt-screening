@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
@@ -75,7 +76,7 @@ func run(ctx context.Context) error {
 // service still boots for local development. The returned cleanup function
 // releases DB/cache resources and must be called by the caller when done.
 func buildServices(ctx context.Context, cfg store.Config) (*api.Services, func(), error) {
-	cache, cleanup, err := openCache(ctx, cfg)
+	cache, db, cleanup, err := openCache(ctx, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -90,8 +91,19 @@ func buildServices(ctx context.Context, cfg store.Config) (*api.Services, func()
 	}
 
 	thresholds := decision.DefaultThresholds()
-	screenStore := screen.NewMemoryScreenStore()
-	alerts := alert.NewService(alert.NewMemoryStore())
+	var screenStore screen.ScreenStore
+	if db != nil {
+		screenStore = store.NewPGScreenStore(db)
+	} else {
+		screenStore = screen.NewMemoryScreenStore()
+	}
+	var alertStore alert.Store
+	if db != nil {
+		alertStore = store.NewPGAlertStore(db)
+	} else {
+		alertStore = alert.NewMemoryStore()
+	}
+	alerts := alert.NewService(alertStore)
 	auditEmitter := audit.NewEmitter(audit.NewMemorySink(), 1024)
 	screenSvc := screen.NewService(cache, provider, thresholds, screenStore, alerts, auditEmitter)
 
@@ -106,24 +118,24 @@ func buildServices(ctx context.Context, cfg store.Config) (*api.Services, func()
 
 // openCache opens the DB and cache. When DB_URL is unset it returns an
 // in-memory cache and a nil db.
-func openCache(ctx context.Context, cfg store.Config) (screen.Cache, func(), error) {
+func openCache(ctx context.Context, cfg store.Config) (screen.Cache, *sql.DB, func(), error) {
 	if cfg.DBURL == "" {
-		return screen.NewMemoryCache(cfg.CacheTTL, cfg.SanctionedCacheTTL), nil, nil
+		return screen.NewMemoryCache(cfg.CacheTTL, cfg.SanctionedCacheTTL), nil, nil, nil
 	}
 	db, err := store.Open(ctx, cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	cache, err := store.NewCache(ctx, cfg, db)
 	if err != nil {
 		_ = db.Close()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	cleanup := func() {
 		_ = cache.Close()
 		_ = db.Close()
 	}
-	return &storeCacheAdapter{cache: cache}, cleanup, nil
+	return &storeCacheAdapter{cache: cache}, db, cleanup, nil
 }
 
 // storeCacheAdapter adapts store.Cache to screen.Cache.
