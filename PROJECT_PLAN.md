@@ -135,13 +135,13 @@ re-classifications) as `kyt_alerts` rows consumable by the compliance dashboard.
 ## Stage 7 — Audit Emission
 
 **Goal:** Emit an audit event for every screen (allow/block/review, cache hit or
-miss) to the Audit / Event Log via the async event bus (NATS/Kafka), with DB
+miss) to the Audit / Event Log via the async event bus (Kafka), with DB
 fallback when `AUDIT_EVENT_BUS_URL` is unset.
 
 **Tasks:**
 - [x] Define audit event schema (request, vendor response or cache source,
       decision, operator/action timestamps, `screen_id`).
-- [x] Implement async producer to NATS/Kafka when `AUDIT_EVENT_BUS_URL` is set.
+- [x] Implement async producer to Kafka when `AUDIT_EVENT_BUS_URL` is set.
 - [x] Implement DB fallback (append to an `audit_events` table) when bus is unset.
 - [x] Ensure audit emission never blocks the screen path (bounded queue + drop
       counter metric on overflow).

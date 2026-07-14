@@ -190,7 +190,7 @@ via **HMAC-SHA256** signatures:
   `address_risk_cache` for sub-millisecond cache hits on the hot path.
 - **Chainalysis API** — external; outbound HTTPS.
 - **TRM Labs API** — external; outbound HTTPS.
-- **Audit / Event Log** — async event bus producer (e.g. NATS / Kafka).
+- **Audit / Event Log** — async event bus producer (Kafka).
 
 ## Configuration
 
@@ -216,7 +216,7 @@ injected via the platform secret store (Vault / SOPS), not committed.
 | `UNKNOWN_DECISION` | no | `manual_review` | Decision returned for `unknown` exposure (`manual_review` or `block`). |
 | `VENDOR_TIMEOUT_MS` | no | `800` | Per-vendor HTTP call timeout. |
 | `VENDOR_CIRCUIT_BREAKER_THRESHOLD` | no | `5` | Consecutive vendor failures before opening the circuit breaker. |
-| `AUDIT_EVENT_BUS_URL` | no | — | NATS/Kafka URL for async audit events. If unset, audit events fall back to the DB. |
+| `AUDIT_EVENT_BUS_URL` | no | — | Kafka URL for async audit events (`kafka://host:9092`). If unset, audit events fall back to the DB. |
 | `LOG_LEVEL` | no | `info` | `debug` / `info` / `warn` / `error`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | — | OpenTelemetry OTLP collector endpoint. |
 
