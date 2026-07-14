@@ -4,7 +4,7 @@ build:
 	go build -o bin/server ./cmd/kyt
 
 test:
-	go test ./... -race -coverprofile=coverage.out -coverpkg=./...
+	go test ./cmd/... ./internal/... -race -coverprofile=coverage.out -coverpkg=./cmd/...,./internal/...
 
 run:
 	go run ./cmd/kyt
