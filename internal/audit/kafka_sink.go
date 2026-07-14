@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -135,8 +134,3 @@ func (s *KafkaSink) Close() error {
 
 // Sent returns the number of events successfully published.
 func (s *KafkaSink) Sent() int64 { return s.sent.Load() }
-
-// resolveAuditBusURL returns the configured AUDIT_EVENT_BUS_URL (or "" if
-// unset). It is a small helper extracted for tests that want to override the
-// env var.
-func resolveAuditBusURL() string { return os.Getenv("AUDIT_EVENT_BUS_URL") }
