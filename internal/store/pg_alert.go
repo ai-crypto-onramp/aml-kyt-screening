@@ -6,7 +6,20 @@ import (
 	"fmt"
 
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/alert"
+	"github.com/lib/pq"
 )
+
+// isInvalidUUID reports whether err is a Postgres invalid_text_representation
+// error (SQLSTATE 22P02), which is raised when a non-UUID string is sent to a
+// UUID-typed column. Callers treat this as "no matching row" (ErrNotFound)
+// rather than surfacing it as an internal 500.
+func isInvalidUUID(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pqErr.Code == "22P02"
+	}
+	return false
+}
 
 // PGAlertStore is a Postgres-backed implementation of alert.Store. It persists
 // kyt_alerts rows (created by migration 0003).
@@ -68,6 +81,9 @@ SELECT id, COALESCE(screen_id::text,''), tx_id, address, chain, exposure, severi
 		return alert.Alert{}, false, nil
 	}
 	if err != nil {
+		if isInvalidUUID(err) {
+			return alert.Alert{}, false, nil
+		}
 		return alert.Alert{}, false, fmt.Errorf("pgalert get: %w", err)
 	}
 	return a, true, nil
@@ -128,6 +144,9 @@ UPDATE kyt_alerts
 		a.ID, screenID, a.TxID, a.Address, a.Chain, a.Exposure, a.Severity, a.Status, assignee, closedAt,
 	)
 	if err != nil {
+		if isInvalidUUID(err) {
+			return alert.ErrNotFound
+		}
 		return fmt.Errorf("pgalert update: %w", err)
 	}
 	n, err := res.RowsAffected()

@@ -2,13 +2,38 @@ package store
 
 import (
 	"context"
-	"os"
+	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/alert"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/screen"
 )
+
+// pgTestPrefix marks rows created by these tests so they can be cleaned up
+// before each run, keeping tests isolated on a shared DB.
+const pgTestPrefix = "pgtest-"
+
+// deleteAlerts deletes all given alert ids so tests are idempotent on a shared DB.
+func deleteAlerts(t *testing.T, db *sql.DB, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		if _, err := db.Exec(`DELETE FROM kyt_alerts WHERE id = $1`, id); err != nil {
+			t.Fatalf("clean alert %s: %v", id, err)
+		}
+	}
+}
+
+// deleteScreens deletes all given screen ids so tests are idempotent on a shared DB.
+func deleteScreens(t *testing.T, db *sql.DB, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		if _, err := db.Exec(`DELETE FROM kyt_screens WHERE screen_id = $1`, id); err != nil {
+			t.Fatalf("clean screen %s: %v", id, err)
+		}
+	}
+}
 
 func TestPGScreenStorePutGet(t *testing.T) {
 	dsn := skipIfNoDB(t)
@@ -19,22 +44,25 @@ func TestPGScreenStorePutGet(t *testing.T) {
 	}
 	defer db.Close()
 
+	screenID := "11111111-2222-3333-4444-555555555555"
+	deleteScreens(t, db, screenID)
+
 	s := NewPGScreenStore(db)
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	rec := screen.ScreenRecord{
-		ScreenID:        "11111111-2222-3333-4444-555555555555",
-		TxID:            "tx-screen-1",
-		Address:         "0xscreen1",
-		SourceAddress:   "0xsrc1",
-		Chain:           "ethereum",
-		Amount:          "100.5",
-		RiskScore:       42,
-		Exposure:        "high_risk",
-		Decision:        "manual_review",
-		Vendor:          "chainalysis",
+		ScreenID:         screenID,
+		TxID:             "tx-screen-1",
+		Address:          pgTestPrefix + "screen1",
+		SourceAddress:    "0xsrc1",
+		Chain:            "ethereum",
+		Amount:           "100.50000000",
+		RiskScore:        42,
+		Exposure:         "high_risk",
+		Decision:         "manual_review",
+		Vendor:           "chainalysis",
 		VendorResponseID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-		CacheHit:        false,
-		CreatedAt:       now,
+		CacheHit:         false,
+		CreatedAt:        now,
 	}
 	if err := s.Put(rec); err != nil {
 		t.Fatalf("put: %v", err)
@@ -93,9 +121,6 @@ func TestPGScreenStorePutEmptyID(t *testing.T) {
 
 func TestPGAlertStoreCreateGet(t *testing.T) {
 	dsn := skipIfNoDB(t)
-	if os.Getenv("DB_URL") == "" {
-		t.Skip("DB_URL not set")
-	}
 	ctx := context.Background()
 	db, err := Open(ctx, Config{DBURL: dsn})
 	if err != nil {
@@ -103,32 +128,35 @@ func TestPGAlertStoreCreateGet(t *testing.T) {
 	}
 	defer db.Close()
 
+	screenID := "22222222-3333-4444-5555-666666666666"
+	alertID := "33333333-4444-5555-6666-777777777777"
+	deleteAlerts(t, db, alertID)
+	deleteScreens(t, db, screenID)
+
 	screenStore := NewPGScreenStore(db)
 	alertStore := NewPGAlertStore(db)
 
-	screenID := "22222222-3333-4444-5555-666666666666"
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	if err := screenStore.Put(screen.ScreenRecord{
 		ScreenID:  screenID,
-		TxID:     "tx-alert-1",
-		Address:  "0xalert1",
-		Chain:    "ethereum",
-		Amount:   "50",
+		TxID:      "tx-alert-1",
+		Address:   pgTestPrefix + "alert1",
+		Chain:     "ethereum",
+		Amount:    "50.00000000",
 		RiskScore: 99,
-		Exposure: "sanctioned",
-		Decision: "block",
-		Vendor:   "chainalysis",
+		Exposure:  "sanctioned",
+		Decision:  "block",
+		Vendor:    "chainalysis",
 		CreatedAt: now,
 	}); err != nil {
 		t.Fatalf("put screen: %v", err)
 	}
 
-	alertID := "33333333-4444-5555-6666-777777777777"
 	a := alert.Alert{
 		ID:        alertID,
 		ScreenID:  screenID,
 		TxID:      "tx-alert-1",
-		Address:   "0xalert1",
+		Address:   pgTestPrefix + "alert1",
 		Chain:     "ethereum",
 		Exposure:  "sanctioned",
 		Severity:  "critical",
@@ -164,13 +192,15 @@ func TestPGAlertStoreDuplicate(t *testing.T) {
 	}
 	defer db.Close()
 
-	alertStore := NewPGAlertStore(db)
 	alertID := "44444444-5555-6666-7777-888888888888"
+	deleteAlerts(t, db, alertID)
+
+	alertStore := NewPGAlertStore(db)
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	a := alert.Alert{
 		ID:        alertID,
 		TxID:      "tx-dup",
-		Address:   "0xdup",
+		Address:   pgTestPrefix + "dup",
 		Chain:     "ethereum",
 		Exposure:  "high_risk",
 		Severity:  "high",
@@ -194,14 +224,20 @@ func TestPGAlertStoreListByStatus(t *testing.T) {
 	}
 	defer db.Close()
 
+	var ids []string
+	for i := 0; i < 4; i++ {
+		ids = append(ids, fmt.Sprintf("55555555-6666-7777-8888-%012d", i))
+	}
+	deleteAlerts(t, db, ids...)
+
 	alertStore := NewPGAlertStore(db)
 	base := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
-	for i, st := range []string{alert.StatusOpen, alert.StatusClosed, alert.StatusOpen, alert.StatusInReview} {
-		id := fmt.Sprintf("55555555-6666-7777-8888-%012d", i)
+	statuses := []string{alert.StatusOpen, alert.StatusClosed, alert.StatusOpen, alert.StatusInReview}
+	for i, st := range statuses {
 		a := alert.Alert{
-			ID:        id,
+			ID:        ids[i],
 			TxID:      "tx-list",
-			Address:   "0xlist",
+			Address:   pgTestPrefix + "list",
 			Chain:     "ethereum",
 			Exposure:  "high_risk",
 			Severity:  "high",
@@ -221,15 +257,27 @@ func TestPGAlertStoreListByStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list open: %v", err)
 	}
-	if len(open) != 2 {
-		t.Fatalf("open count: %d", len(open))
+	openCount := 0
+	for _, a := range open {
+		if a.Address == pgTestPrefix+"list" {
+			openCount++
+		}
+	}
+	if openCount != 2 {
+		t.Fatalf("open count: %d", openCount)
 	}
 	all, err := alertStore.List("")
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
-	if len(all) < 4 {
-		t.Fatalf("all count: %d", len(all))
+	allCount := 0
+	for _, a := range all {
+		if a.Address == pgTestPrefix+"list" {
+			allCount++
+		}
+	}
+	if allCount != 4 {
+		t.Fatalf("all count: %d", allCount)
 	}
 }
 
@@ -242,13 +290,15 @@ func TestPGAlertStoreUpdate(t *testing.T) {
 	}
 	defer db.Close()
 
-	alertStore := NewPGAlertStore(db)
 	alertID := "66666666-7777-8888-9999-aaaaaaaaaaaa"
+	deleteAlerts(t, db, alertID)
+
+	alertStore := NewPGAlertStore(db)
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	a := alert.Alert{
 		ID:        alertID,
 		TxID:      "tx-upd",
-		Address:   "0xupd",
+		Address:   pgTestPrefix + "upd",
 		Chain:     "ethereum",
 		Exposure:  "high_risk",
 		Severity:  "high",
@@ -321,28 +371,4 @@ func TestPGAlertStoreGetMiss(t *testing.T) {
 	if ok {
 		t.Fatal("expected miss")
 	}
-}
-
-func padInt(i int) string {
-	s := ""
-	switch {
-	case i < 10:
-		s = "00000000000"
-	case i < 100:
-		s = "0000000000"
-	}
-	return s + intToStr(i)
-}
-
-func intToStr(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	digits := "0123456789"
-	var b []byte
-	for i > 0 {
-		b = append([]byte{digits[i%10]}, b...)
-		i /= 10
-	}
-	return string(b)
 }
