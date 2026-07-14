@@ -4,12 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/alert"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/screen"
 )
+
+// skipIfNoDB skips tests requiring a live Postgres. Set DB_URL in CI/local to
+// run them; otherwise they skip.
+func skipIfNoDB(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("DB_URL")
+	if dsn == "" {
+		t.Skip("DB_URL not set; skipping live Postgres test")
+	}
+	return dsn
+}
 
 // pgTestPrefix marks rows created by these tests so they can be cleaned up
 // before each run, keeping tests isolated on a shared DB.
