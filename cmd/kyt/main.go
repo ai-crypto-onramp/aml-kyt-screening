@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -167,27 +166,26 @@ func buildServices(ctx context.Context, cfg store.Config) (*api.Services, func()
 
 // buildAuditSink selects the audit Sink based on AUDIT_EVENT_BUS_URL:
 //   - unset -> DBSink when DB_URL is set, otherwise MemorySink (DB-less mode)
-//   - nats:// or tls:// -> NATSSink
+//   - kafka:// or plain host:9092[,host2] -> KafkaSink
 //   - memory:// or empty -> MemorySink
 func buildAuditSink(ctx context.Context, db *sql.DB) (audit.Sink, func(), error) {
 	busURL := os.Getenv("AUDIT_EVENT_BUS_URL")
-	switch {
-	case strings.HasPrefix(busURL, "nats://"), strings.HasPrefix(busURL, "tls://"):
-		sink, err := audit.NewNATSSink(busURL, audit.DefaultAuditSubject)
-		if err != nil {
-			return nil, nil, err
-		}
-		return sink, func() { _ = sink.Close() }, nil
-	case strings.HasPrefix(busURL, "memory://"):
-		return audit.NewMemorySink(), nil, nil
-	case busURL == "":
-		if db != nil {
-			return audit.NewDBSink(db), nil, nil
-		}
-		return audit.NewMemorySink(), nil, nil
-	default:
-		return nil, nil, fmt.Errorf("audit: unknown event bus scheme in %q", busURL)
+	sink, err := audit.NewSink(busURL)
+	if err != nil {
+		return nil, nil, err
 	}
+	closer := func() {
+		if c, ok := sink.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+	}
+	// When the URL is unset and a DB is present, NewSink returns a
+	// MemorySink; override with the DB sink here to keep the durable
+	// fallback behavior.
+	if busURL == "" && db != nil {
+		return audit.NewDBSink(db), nil, nil
+	}
+	return sink, closer, nil
 }
 
 // openCache opens the DB and cache. When DB_URL is unset it returns an

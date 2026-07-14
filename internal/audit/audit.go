@@ -30,7 +30,7 @@ type Event struct {
 }
 
 // Sink is the abstraction for the audit event destination. Implementations
-// include the async bus producer (NATS/Kafka) and the DB-fallback sink.
+// include the async bus producer (Kafka) and the DB-fallback sink.
 type Sink interface {
 	Emit(ctx context.Context, e Event) error
 }

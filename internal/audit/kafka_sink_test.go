@@ -29,37 +29,45 @@ func TestNewSinkMemoryScheme(t *testing.T) {
 }
 
 func TestNewSinkUnknownScheme(t *testing.T) {
-	_, err := NewSink("kafka://broker:9092")
+	_, err := NewSink("foobar://broker:9092")
 	if err == nil || !strings.Contains(err.Error(), "unknown event bus scheme") {
 		t.Fatalf("err: %v", err)
 	}
 }
 
-func TestNewNATSSinkConnectError(t *testing.T) {
-	_, err := NewNATSSink("nats://127.0.0.1:1", "")
-	if err == nil {
-		t.Fatal("expected error connecting to non-existent NATS")
-	}
-	if !strings.Contains(err.Error(), "nats connect") {
-		t.Errorf("err: %v", err)
+func TestNewSinkRejectsNATSScheme(t *testing.T) {
+	_, err := NewSink("nats://127.0.0.1:4222")
+	if err == nil || !strings.Contains(err.Error(), "unknown event bus scheme") {
+		t.Fatalf("expected unknown-scheme error for legacy nats:// url, got %v", err)
 	}
 }
 
-func TestNATSSinkConstructorSetsSubject(t *testing.T) {
-	// We cannot connect to a real server in unit tests; just verify the
-	// constructor subject default logic via the exported const.
-	if DefaultAuditSubject == "" {
-		t.Fatal("DefaultAuditSubject must be set")
+func TestNewKafkaSinkFromURLNoBrokers(t *testing.T) {
+	_, err := NewKafkaSinkFromURL("kafka://", DefaultAuditTopic)
+	if err == nil || !strings.Contains(err.Error(), "no brokers") {
+		t.Fatalf("expected no-brokers error, got %v", err)
 	}
 }
 
-func TestNATSSinkEmitOnClosedConn(t *testing.T) {
-	sink := &NATSSink{subject: "kyt.audit.v1"}
+func TestNewKafkaSinkFromURLParsesTopic(t *testing.T) {
+	// No real connection is made until Emit; just verify parsing.
+	s, err := NewKafkaSinkFromURL("kafka://broker:9092?topic=custom.audit", DefaultAuditTopic)
+	if err != nil {
+		t.Fatalf("NewKafkaSinkFromURL: %v", err)
+	}
+	if s.topic != "custom.audit" {
+		t.Fatalf("expected topic custom.audit, got %q", s.topic)
+	}
+	_ = s.Close()
+}
+
+func TestKafkaSinkEmitOnClosedWriter(t *testing.T) {
+	sink := &KafkaSink{topic: "kyt.audit.v1"}
 	if err := sink.Emit(context.Background(), Event{ScreenID: "s1"}); err == nil {
-		t.Fatal("expected error emitting on nil conn")
+		t.Fatal("expected error emitting on nil writer")
 	}
 	if err := sink.Close(); err != nil {
-		t.Errorf("close should be no-op on nil conn: %v", err)
+		t.Errorf("close should be no-op on nil writer: %v", err)
 	}
 	if sink.Sent() != 0 {
 		t.Errorf("sent should be 0, got %d", sink.Sent())
