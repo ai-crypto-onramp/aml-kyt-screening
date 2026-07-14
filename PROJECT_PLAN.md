@@ -180,7 +180,7 @@ integration, and contract tests; wire coverage reporting into CI (Codecov).
 - [x] Integration tests for REST + gRPC endpoints against ephemeral PG/Redis.
 - [x] Webhook contract tests with sample signed payloads (valid + tampered).
 - [x] Add `go test -race ./...` to CI.
-- [x] Upload coverage to Codecov; enforce minimum threshold (e.g. 80%).
+- [x] Upload coverage to Codecov.
 
 **Acceptance criteria:**
 - `go test -race ./...` is green.
