@@ -235,9 +235,6 @@ go test ./... -race -cover
 # Run linter
 go vet ./...
 
-# Bring up Postgres + Redis + the service
-docker compose up
-
 # Apply / roll back DB migrations
 DB_URL=postgres://kyt:kyt@localhost:5432/kyt?sslmode=disable go run ./cmd/kyt
 ```
