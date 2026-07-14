@@ -21,5 +21,11 @@ docker-build:
 docker-run:
 	docker run --rm -p 8080:8080 ai-crypto-onramp/aml-kyt-screening
 
+migrate-up:
+	DB_URL="$(DB_URL)" go run ./cmd/migrate --up
+
+migrate-down:
+	DB_URL="$(DB_URL)" go run ./cmd/migrate --down
+
 clean:
 	rm -rf bin/ coverage.out

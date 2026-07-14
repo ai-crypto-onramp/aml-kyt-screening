@@ -5,3 +5,4 @@ bin/
 *.log
 coverage.out
 *.testcoverage.out
+/migrate
