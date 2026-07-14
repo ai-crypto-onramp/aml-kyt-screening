@@ -11,10 +11,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,8 +24,11 @@ import (
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/api"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/audit"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/decision"
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/grpcserver"
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/review"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/screen"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/store"
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/tracing"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/vendor"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/webhook"
 )
@@ -36,8 +41,14 @@ func main() {
 	}
 }
 
-// run wires all services and runs the HTTP server until ctx is cancelled.
+// run wires all services and runs the HTTP + gRPC servers until ctx is
+// cancelled.
 func run(ctx context.Context) error {
+	if _, err := tracing.Install(ctx); err != nil {
+		return fmt.Errorf("install tracer: %w", err)
+	}
+	defer tracing.Shutdown(context.Background())
+
 	cfg := store.LoadConfig()
 
 	services, cleanup, err := buildServices(ctx, cfg)
@@ -57,18 +68,40 @@ func run(ctx context.Context) error {
 	}
 	srv := api.NewServer(services, ":"+port)
 
+	grpcPort := os.Getenv("GRPC_PORT")
+	if grpcPort == "" {
+		grpcPort = "9090"
+	}
+	grpcSrv := grpcserver.NewServer(services)
+
+	errCh := make(chan error, 2)
 	go func() {
-		log.Printf("kyt listening on %s", srv.Addr)
+		log.Printf("kyt REST listening on %s", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("listen: %v", err)
+			errCh <- fmt.Errorf("rest listen: %w", err)
+		}
+	}()
+	go func() {
+		log.Printf("kyt gRPC listening on :%s", grpcPort)
+		if err := grpcSrv.Start(":" + grpcPort); err != nil {
+			errCh <- fmt.Errorf("grpc serve: %w", err)
 		}
 	}()
 
-	<-ctx.Done()
-	log.Println("shutting down")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+	select {
+	case <-ctx.Done():
+		log.Println("shutting down")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		grpcSrv.Stop()
+		return srv.Shutdown(shutdownCtx)
+	case err := <-errCh:
+		grpcSrv.Stop()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+		return err
+	}
 }
 
 // buildServices constructs the *api.Services from the given config. When
@@ -104,16 +137,57 @@ func buildServices(ctx context.Context, cfg store.Config) (*api.Services, func()
 		alertStore = alert.NewMemoryStore()
 	}
 	alerts := alert.NewService(alertStore)
-	auditEmitter := audit.NewEmitter(audit.NewMemorySink(), 1024)
+	auditSink, auditCleanup, err := buildAuditSink(ctx, db)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, nil, fmt.Errorf("build audit sink: %w", err)
+	}
+	if auditCleanup != nil {
+		prev := cleanup
+		cleanup = func() {
+			if prev != nil {
+				prev()
+			}
+			auditCleanup()
+		}
+	}
+	auditEmitter := audit.NewEmitter(auditSink, 1024)
 	screenSvc := screen.NewService(cache, provider, thresholds, screenStore, alerts, auditEmitter)
 
 	verifier := webhook.NewVerifier(map[string][]byte{
 		"chainalysis": []byte(os.Getenv("CHAINALYSIS_WEBHOOK_SECRET")),
 		"trm":         []byte(os.Getenv("TRM_WEBHOOK_SECRET")),
 	})
-	proc := webhook.NewProcessor(verifier, cache, alerts)
+	proc := webhook.NewProcessor(verifier, cache, alerts).WithReviewer(review.NewTrigger(screenStore, alerts))
 
 	return &api.Services{Screen: screenSvc, Alerts: alerts, Webhook: proc, Audit: auditEmitter}, cleanup, nil
+}
+
+// buildAuditSink selects the audit Sink based on AUDIT_EVENT_BUS_URL:
+//   - unset -> DBSink when DB_URL is set, otherwise MemorySink (DB-less mode)
+//   - nats:// or tls:// -> NATSSink
+//   - memory:// or empty -> MemorySink
+func buildAuditSink(ctx context.Context, db *sql.DB) (audit.Sink, func(), error) {
+	busURL := os.Getenv("AUDIT_EVENT_BUS_URL")
+	switch {
+	case strings.HasPrefix(busURL, "nats://"), strings.HasPrefix(busURL, "tls://"):
+		sink, err := audit.NewNATSSink(busURL, audit.DefaultAuditSubject)
+		if err != nil {
+			return nil, nil, err
+		}
+		return sink, func() { _ = sink.Close() }, nil
+	case strings.HasPrefix(busURL, "memory://"):
+		return audit.NewMemorySink(), nil, nil
+	case busURL == "":
+		if db != nil {
+			return audit.NewDBSink(db), nil, nil
+		}
+		return audit.NewMemorySink(), nil, nil
+	default:
+		return nil, nil, fmt.Errorf("audit: unknown event bus scheme in %q", busURL)
+	}
 }
 
 // openCache opens the DB and cache. When DB_URL is unset it returns an

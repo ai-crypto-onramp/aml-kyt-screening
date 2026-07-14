@@ -178,6 +178,22 @@ func TestMemoryCacheTTLAndDelete(t *testing.T) {
 	}
 }
 
+func TestMemoryCacheLen(t *testing.T) {
+	c := NewMemoryCache(time.Hour, 24*time.Hour)
+	if c.Len() != 0 {
+		t.Fatalf("initial len: %d", c.Len())
+	}
+	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "clean", Decision: "allow"})
+	_ = c.Set(context.Background(), Verdict{Address: "0x2", Chain: "ethereum", Exposure: "clean", Decision: "allow"})
+	if c.Len() != 2 {
+		t.Fatalf("len after set: %d", c.Len())
+	}
+	_ = c.Delete(context.Background(), "0x1", "ethereum")
+	if c.Len() != 1 {
+		t.Fatalf("len after delete: %d", c.Len())
+	}
+}
+
 func TestMemoryCacheExpired(t *testing.T) {
 	now := time.Now()
 	c := NewMemoryCache(time.Hour, 24*time.Hour).WithNow(func() time.Time { return now })
@@ -260,8 +276,11 @@ type errScreenStore struct{}
 
 var errScreenStoreErr = errors.New("store down")
 
-func (errScreenStore) Put(rec ScreenRecord) error                { return errScreenStoreErr }
-func (errScreenStore) Get(id string) (ScreenRecord, bool, error) { return ScreenRecord{}, false, nil }
+func (errScreenStore) Put(rec ScreenRecord) error                            { return errScreenStoreErr }
+func (errScreenStore) Get(id string) (ScreenRecord, bool, error)              { return ScreenRecord{}, false, nil }
+func (errScreenStore) ListByAddress(address, chain string) ([]ScreenRecord, error) {
+	return nil, nil
+}
 
 // waitFor polls the audit sink until n events are present or times out.
 func waitFor(sink *audit.MemorySink, n int) {

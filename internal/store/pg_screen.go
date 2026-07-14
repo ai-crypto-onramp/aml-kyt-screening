@@ -82,3 +82,36 @@ SELECT screen_id, tx_id, address, COALESCE(source_address,''), chain, amount::te
 	rec.VendorResponseID = vendorResponseID
 	return rec, true, nil
 }
+
+// ListByAddress returns all kyt_screens rows for (address, chain), ordered by
+// created_at ascending. Used by the webhook re-classification path to trigger
+// downstream review of already-settled transactions for the affected address.
+func (s *PGScreenStore) ListByAddress(address, chain string) ([]screen.ScreenRecord, error) {
+	rows, err := s.db.Query(`
+SELECT screen_id, tx_id, address, COALESCE(source_address,''), chain, amount::text, risk_score, exposure, decision, vendor, COALESCE(vendor_response_id::text,''), cache_hit, created_at
+  FROM kyt_screens
+ WHERE address = $1 AND chain = $2
+ ORDER BY created_at ASC`, address, chain)
+	if err != nil {
+		return nil, fmt.Errorf("pgscreen list by address: %w", err)
+	}
+	defer rows.Close()
+	var out []screen.ScreenRecord
+	for rows.Next() {
+		var rec screen.ScreenRecord
+		var vendorResponseID string
+		if err := rows.Scan(
+			&rec.ScreenID, &rec.TxID, &rec.Address, &rec.SourceAddress, &rec.Chain, &rec.Amount,
+			&rec.RiskScore, &rec.Exposure, &rec.Decision, &rec.Vendor, &vendorResponseID,
+			&rec.CacheHit, &rec.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("pgscreen list scan: %w", err)
+		}
+		rec.VendorResponseID = vendorResponseID
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("pgscreen list rows: %w", err)
+	}
+	return out, nil
+}

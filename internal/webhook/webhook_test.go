@@ -7,7 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/alert"
 )
@@ -188,5 +190,73 @@ func TestReadBody(t *testing.T) {
 	}
 	if _, err := ReadBody(bytes.NewBuffer(make([]byte, 2048)), 1024); !errors.Is(err, ErrBodyTooLarge) {
 		t.Fatalf("err: %v", err)
+	}
+}
+
+type mockReviewer struct {
+	mu     sync.Mutex
+	called bool
+	addr   string
+	chain  string
+	exp    string
+	txID   string
+}
+
+func (m *mockReviewer) TriggerReview(_ context.Context, address, chain, exposure, txID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.called = true
+	m.addr = address
+	m.chain = chain
+	m.exp = exposure
+	m.txID = txID
+	return nil
+}
+
+func (m *mockReviewer) snapshot() (bool, string, string, string, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.called, m.addr, m.chain, m.exp, m.txID
+}
+
+func TestProcessorWithReviewerTriggersOnAccept(t *testing.T) {
+	v := NewVerifier(map[string][]byte{"chainalysis": []byte("secret")})
+	cache := &mockCache{}
+	alerts := alert.NewService(alert.NewMemoryStore())
+	rv := &mockReviewer{}
+	p := NewProcessor(v, cache, alerts).WithReviewer(rv)
+
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned","tx_id":"tx1"}`)
+	res := p.Ingest(context.Background(), "chainalysis", body, sign([]byte("secret"), body))
+	if !res.Accepted {
+		t.Fatalf("expected accepted, got %+v", res)
+	}
+	// The reviewer runs asynchronously; poll briefly until invoked.
+	deadline := time.Now().Add(time.Second)
+	for {
+		called, addr, chain, exp, txID := rv.snapshot()
+		if called {
+			if addr != "0x1" || chain != "ethereum" || exp != "sanctioned" || txID != "tx1" {
+				t.Errorf("reviewer args: addr=%s chain=%s exp=%s txID=%s", addr, chain, exp, txID)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("reviewer not invoked")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestProcessorWithReviewerNotTriggeredOnTamper(t *testing.T) {
+	v := NewVerifier(map[string][]byte{"chainalysis": []byte("secret")})
+	alerts := alert.NewService(alert.NewMemoryStore())
+	rv := &mockReviewer{}
+	p := NewProcessor(v, &mockCache{}, alerts).WithReviewer(rv)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	_ = p.Ingest(context.Background(), "chainalysis", body, "bad-sig")
+	called, _, _, _, _ := rv.snapshot()
+	if called {
+		t.Fatal("reviewer must not be invoked on tampered payload")
 	}
 }

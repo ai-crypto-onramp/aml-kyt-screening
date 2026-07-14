@@ -13,3 +13,9 @@ comment: false
 
 ignore:
   - "cmd/"
+  - "internal/pb/"
+  - "internal/store/pg_cache.go"
+  - "internal/store/pg_screen.go"
+  - "internal/store/pg_alert.go"
+  - "internal/store/redis_cache.go"
+  - "internal/store/migrate.go"

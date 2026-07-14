@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,7 @@ type ScreenRecord struct {
 type ScreenStore interface {
 	Put(rec ScreenRecord) error
 	Get(id string) (ScreenRecord, bool, error)
+	ListByAddress(address, chain string) ([]ScreenRecord, error)
 }
 
 // Cache is the subset of the store.Cache interface used here.
@@ -301,6 +303,22 @@ func (s *MemoryScreenStore) Get(id string) (ScreenRecord, bool, error) {
 	defer s.mu.Unlock()
 	r, ok := s.mem[id]
 	return r, ok, nil
+}
+
+// ListByAddress returns all stored records for (address, chain), ordered by
+// created_at ascending. Used by the webhook re-classification path to trigger
+// downstream review of already-settled transactions for the affected address.
+func (s *MemoryScreenStore) ListByAddress(address, chain string) ([]ScreenRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []ScreenRecord
+	for _, r := range s.mem {
+		if r.Address == address && r.Chain == chain {
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
 }
 
 // Len returns the number of stored records.

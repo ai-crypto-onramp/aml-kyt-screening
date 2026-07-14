@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package kyt;
+
+option go_package = "github.com/ai-crypto-onramp/aml-kyt-screening/internal/pb;kytpb";
+
+// KYTService is served by the AML / KYT Screening service for the
+// Transaction Orchestrator on the synchronous transaction path.
+service KYTService {
+  // Screen runs a synchronous KYT screen for a destination address.
+  rpc Screen(ScreenRequest) returns (ScreenResponse);
+  // GetAlert returns the alert with the given id (compliance dashboard).
+  rpc GetAlert(GetAlertRequest) returns (Alert);
+}
+
+message ScreenRequest {
+  string tx_id = 1;
+  string address = 2;
+  string source_address = 3;
+  string chain = 4;
+  string amount = 5;
+}
+
+message ScreenResponse {
+  string screen_id = 1;
+  int32 risk_score = 2;
+  string exposure = 3;
+  string decision = 4;
+  string vendor = 5;
+  bool cache_hit = 6;
+}
+
+message GetAlertRequest {
+  string id = 1;
+}
+
+message Alert {
+  string id = 1;
+  string screen_id = 2;
+  string tx_id = 3;
+  string address = 4;
+  string chain = 5;
+  string exposure = 6;
+  string severity = 7;
+  string status = 8;
+  string assignee = 9;
+  string created_at = 10;
+  string closed_at = 11;
+}

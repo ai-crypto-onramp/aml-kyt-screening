@@ -60,14 +60,14 @@ the mirroring `Screen` gRPC method, used by the Transaction Orchestrator on the
 transaction path.
 
 **Tasks:**
-- [ ] Define gRPC proto for `Screen(ScreenRequest) returns (ScreenResponse)` and
+- [x] Define gRPC proto for `Screen(ScreenRequest) returns (ScreenResponse)` and
       `GetAlert(GetAlertRequest) returns (Alert)`; generate stubs via `buf generate`.
 - [x] Implement REST handler with JSON validation (address, chain, amount, tx_id).
-- [ ] Implement gRPC server mirroring the REST contract.
+- [x] Implement gRPC server mirroring the REST contract.
 - [x] Wire handler to cache lookup -> vendor screen -> decision logic -> persist
       `kyt_screens` row.
 - [x] Return `screen_id`, `risk_score`, `exposure`, `decision`.
-- [ ] Add request ID / trace propagation (OpenTelemetry context).
+- [x] Add request ID / trace propagation (OpenTelemetry context).
 
 **Acceptance criteria:**
 - `POST /v1/kyt/screen` returns 200 with the documented JSON body.
@@ -105,7 +105,7 @@ re-classifications (e.g. newly tainted address) into alerts and cache invalidati
       `crypto/subtle.ConstantTimeCompare`; return 401 on mismatch.
 - [x] Parse vendor payload, create/update `kyt_alerts` for new exposures.
 - [x] Invalidate `address_risk_cache` entries for re-classified addresses.
-- [ ] Trigger downstream review of already-settled transactions for the affected
+- [x] Trigger downstream review of already-settled transactions for the affected
       address (best-effort; async).
 - [x] Log signature mismatches for security monitoring.
 
@@ -122,7 +122,7 @@ re-classifications) as `kyt_alerts` rows consumable by the compliance dashboard.
 **Tasks:**
 - [x] Implement `AlertService.Create` writing to `kyt_alerts` with `status=open`.
 - [x] Implement `GET /v1/kyt/alerts/:id` returning the alert payload.
-- [ ] Implement gRPC `GetAlert` mirror.
+- [x] Implement gRPC `GetAlert` mirror.
 - [x] Assign default severity from exposure (`sanctioned` -> `critical`,
       `high_risk` -> `high`).
 - [x] Expose list/assign/close operations for the compliance dashboard.
@@ -141,7 +141,7 @@ fallback when `AUDIT_EVENT_BUS_URL` is unset.
 **Tasks:**
 - [x] Define audit event schema (request, vendor response or cache source,
       decision, operator/action timestamps, `screen_id`).
-- [ ] Implement async producer to NATS/Kafka when `AUDIT_EVENT_BUS_URL` is set.
+- [x] Implement async producer to NATS/Kafka when `AUDIT_EVENT_BUS_URL` is set.
 - [x] Implement DB fallback (append to an `audit_events` table) when bus is unset.
 - [x] Ensure audit emission never blocks the screen path (bounded queue + drop
       counter metric on overflow).
@@ -157,7 +157,7 @@ fallback when `AUDIT_EVENT_BUS_URL` is unset.
 covering the hot path, vendor calls, cache, webhooks, and audit emission.
 
 **Tasks:**
-- [ ] Instrument REST and gRPC handlers with OTel spans; propagate trace context
+- [x] Instrument REST and gRPC handlers with OTel spans; propagate trace context
       to vendor calls.
 - [x] Add Prometheus metrics: `kyt_screen_duration_seconds`, `kyt_screen_total`,
       `kyt_cache_hits_total`, `kyt_cache_misses_total`, `kyt_vendor_errors_total`,
@@ -177,7 +177,7 @@ integration, and contract tests; wire coverage reporting into CI (Codecov).
 
 **Tasks:**
 - [x] Unit tests for cache, decision engine, providers (mock), HMAC verification.
-- [ ] Integration tests for REST + gRPC endpoints against ephemeral PG/Redis.
+- [x] Integration tests for REST + gRPC endpoints against ephemeral PG/Redis.
 - [x] Webhook contract tests with sample signed payloads (valid + tampered).
 - [x] Add `go test -race ./...` to CI.
 - [x] Upload coverage to Codecov; enforce minimum threshold (e.g. 80%).
@@ -198,7 +198,7 @@ lints, tests, and publishes the service; integrate with the existing
 - [x] Add `docker-compose.yml` for local dev (postgres, redis, mock vendor).
 - [x] Wire CI: `go build`, `golangci-lint run`, `go test -race`, `buf generate`
       check, coverage upload.
-- [ ] Add release workflow that builds and publishes the image on tag.
+- [x] Add release workflow that builds and publishes the image on tag.
 - [x] Document local dev workflow in README.
 
 **Acceptance criteria:**

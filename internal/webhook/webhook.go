@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/alert"
 )
@@ -69,6 +70,13 @@ type CacheInvalidator interface {
 	Delete(ctx context.Context, address, chain string) error
 }
 
+// ReviewTrigger triggers downstream review of already-settled transactions
+// for a re-classified address. It is invoked best-effort and asynchronously by
+// the webhook processor after a re-classification is accepted.
+type ReviewTrigger interface {
+	TriggerReview(ctx context.Context, address, chain, exposure, txID string) error
+}
+
 // Result is the outcome of a webhook ingestion.
 type Result struct {
 	Accepted  bool
@@ -78,11 +86,14 @@ type Result struct {
 }
 
 // Processor handles verified vendor webhooks: dedupes by event id, parses the
-// reclassification, invalidates the cache, and creates an alert.
+// reclassification, invalidates the cache, creates an alert, and triggers
+// best-effort downstream review of already-settled transactions for the
+// affected address.
 type Processor struct {
 	verifier *Verifier
 	cache    CacheInvalidator
 	alerts   *alert.Service
+	reviewer ReviewTrigger
 	mu       sync.Mutex
 	seen     map[string]bool
 }
@@ -90,6 +101,14 @@ type Processor struct {
 // NewProcessor returns a webhook Processor.
 func NewProcessor(verifier *Verifier, cache CacheInvalidator, alerts *alert.Service) *Processor {
 	return &Processor{verifier: verifier, cache: cache, alerts: alerts, seen: make(map[string]bool)}
+}
+
+// WithReviewer installs a ReviewTrigger invoked after a re-classification is
+// accepted. The trigger runs asynchronously (best-effort); failures are logged
+// but do not affect the webhook response.
+func (p *Processor) WithReviewer(r ReviewTrigger) *Processor {
+	p.reviewer = r
+	return p
 }
 
 // Ingest verifies, dedupes, and processes a vendor webhook.
@@ -127,7 +146,19 @@ func (p *Processor) Ingest(ctx context.Context, vendor string, body []byte, sig 
 			return Result{Reason: "alert create: " + err.Error()}
 		}
 	}
+	if p.reviewer != nil {
+		go p.triggerReview(context.Background(), rec)
+	}
 	return Result{Accepted: true, EventID: rec.EventID}
+}
+
+// triggerReview invokes the downstream ReviewTrigger best-effort. It uses a
+// background context (the webhook request may have already returned) and a
+// bounded timeout so a slow downstream cannot block the goroutine forever.
+func (p *Processor) triggerReview(ctx context.Context, rec Reclassification) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	_ = p.reviewer.TriggerReview(ctx, rec.Address, rec.Chain, rec.Exposure, rec.TxID)
 }
 
 // alertSeverity maps an exposure to an alert severity.

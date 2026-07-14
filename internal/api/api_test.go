@@ -18,6 +18,7 @@ import (
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/decision"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/metrics"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/screen"
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/tracing"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/vendor"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/webhook"
 )
@@ -281,6 +282,62 @@ func TestNewServer(t *testing.T) {
 		t.Fatal("nil server")
 	}
 	_ = srv.Close()
+}
+
+func TestRequestIDMiddlewareGeneratesID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	NewMux(newTestServices(t)).ServeHTTP(rec, req)
+	if rid := rec.Header().Get("X-Request-Id"); rid == "" {
+		t.Error("expected generated X-Request-Id response header")
+	}
+}
+
+func TestRequestIDMiddlewarePreservesIncomingID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("X-Request-Id", "req-123")
+	rec := httptest.NewRecorder()
+	NewMux(newTestServices(t)).ServeHTTP(rec, req)
+	if rid := rec.Header().Get("X-Request-Id"); rid != "req-123" {
+		t.Errorf("X-Request-Id: got %q want req-123", rid)
+	}
+}
+
+func TestScreenHandlerEmitsXRequestIDOnError(t *testing.T) {
+	s := newTestServices(t)
+	body := bytes.NewBufferString(`{"tx_id":"","address":"0x1","chain":"ethereum","amount":"100"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/kyt/screen", body)
+	req.Header.Set("X-Request-Id", "req-err-1")
+	rec := httptest.NewRecorder()
+	NewMux(s).ServeHTTP(rec, req)
+	if rid := rec.Header().Get("X-Request-Id"); rid != "req-err-1" {
+		t.Errorf("X-Request-Id on error: got %q want req-err-1", rid)
+	}
+	var env errorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Error.RequestID != "req-err-1" {
+		t.Errorf("error request_id: got %q want req-err-1", env.Error.RequestID)
+	}
+}
+
+func TestTraceMiddlewareProducesSpanContext(t *testing.T) {
+	// Install a no-op tracer provider so the trace middleware has a tracer to
+	// build spans with, even without an exporter configured.
+	ctx := context.Background()
+	shutdown, err := tracing.Install(ctx)
+	if err != nil {
+		t.Fatalf("install tracer: %v", err)
+	}
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	req := httptest.NewRequest(http.MethodPost, "/v1/kyt/screen", bytes.NewBufferString(`{"tx_id":"tx1","address":"0x1","chain":"ethereum","amount":"100"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	NewMux(newTestServices(t)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: %d body: %s", rec.Code, rec.Body.String())
+	}
 }
 
 // Ensure context cancellation propagates through screen handler.

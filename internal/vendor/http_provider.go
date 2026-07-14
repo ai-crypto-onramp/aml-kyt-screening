@@ -9,6 +9,9 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/tracing"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // HTTPProvider is a ScreenProvider backed by an HTTP API. It is generic enough
@@ -62,6 +65,10 @@ func (p *HTTPProvider) Screen(ctx context.Context, req ScreenRequest) (ScreenRes
 
 	var resp ScreenResponse
 	callErr := p.breaker.Execute(ctx, func(ctx context.Context) error {
+		ctx, span := tracing.StartSpan(ctx, "vendor."+p.name+".Screen",
+			trace.WithSpanKind(trace.SpanKindClient),
+		)
+		defer span.End()
 		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/v1/screen", bytes.NewReader(body))
 		if err != nil {
 			return err
@@ -69,24 +76,32 @@ func (p *HTTPProvider) Screen(ctx context.Context, req ScreenRequest) (ScreenRes
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 		httpReq.Header.Set("X-Idempotency-Key", req.IdempotencyKey)
+		tracing.Propagate(ctx, httpReq)
 
 		httpResp, err := p.client.Do(httpReq)
 		if err != nil {
+			tracing.RecordError(ctx, err)
 			return err
 		}
 		defer httpResp.Body.Close()
 		raw, err := io.ReadAll(httpResp.Body)
 		if err != nil {
+			tracing.RecordError(ctx, err)
 			return err
 		}
 		if httpResp.StatusCode >= 500 {
-			return fmt.Errorf("vendor %s: status %d", p.name, httpResp.StatusCode)
+			verr := fmt.Errorf("vendor %s: status %d", p.name, httpResp.StatusCode)
+			tracing.RecordError(ctx, verr)
+			return verr
 		}
 		if httpResp.StatusCode >= 400 {
-			return fmt.Errorf("vendor %s: client error status %d: %s", p.name, httpResp.StatusCode, string(raw))
+			verr := fmt.Errorf("vendor %s: client error status %d: %s", p.name, httpResp.StatusCode, string(raw))
+			tracing.RecordError(ctx, verr)
+			return verr
 		}
 		out, err := p.decoder(p.name, req, raw)
 		if err != nil {
+			tracing.RecordError(ctx, err)
 			return err
 		}
 		out.RawRequest = body

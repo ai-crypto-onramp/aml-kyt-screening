@@ -3,6 +3,8 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,7 +16,12 @@ import (
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/audit"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/metrics"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/screen"
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/tracing"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/webhook"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Services bundles all dependencies used by the HTTP handlers.
@@ -36,7 +43,7 @@ func NewMux(s *Services) http.Handler {
 	mux.HandleFunc("POST /v1/kyt/alerts/{id}/assign", assignAlertHandler(s))
 	mux.HandleFunc("POST /v1/kyt/alerts/{id}/close", closeAlertHandler(s))
 	mux.HandleFunc("POST /v1/webhooks/{vendor}", webhookHandler(s))
-	return mux
+	return requestIDMiddleware(traceMiddleware(mux))
 }
 
 // NewServer wires middleware and returns an *http.Server.
@@ -46,6 +53,70 @@ func NewServer(s *Services, addr string) *http.Server {
 		Handler:           NewMux(s),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+}
+
+// ctxKey is an unexported context key type.
+type ctxKey int
+
+const (
+	keyRequestID ctxKey = iota
+)
+
+func requestIDFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(keyRequestID).(string); ok {
+		return v
+	}
+	return ""
+}
+
+func newRequestID() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
+// requestIDMiddleware propagates an existing X-Request-Id or generates a new
+// one, stores it in the request context, and echoes it back on the response.
+func requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rid := r.Header.Get("X-Request-Id")
+		if rid == "" {
+			rid = newRequestID()
+		}
+		w.Header().Set("X-Request-Id", rid)
+		ctx := context.WithValue(r.Context(), keyRequestID, rid)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// traceMiddleware extracts trace context from incoming headers, starts a
+// server span for the request, records the HTTP status code, and propagates
+// the span context downstream via the request context.
+func traceMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		prop := propagation.TraceContext{}
+		ctx = prop.Extract(ctx, propagation.HeaderCarrier(r.Header))
+		spanName := r.Method + " " + r.URL.Path
+		ctx, span := tracing.StartSpan(ctx, spanName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r.WithContext(ctx))
+		span.SetAttributes(semconv.HTTPResponseStatusCode(rw.status))
+		if rw.status >= 500 {
+			span.SetStatus(codes.Error, http.StatusText(rw.status))
+		}
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
@@ -76,18 +147,20 @@ var (
 
 type errorEnvelope struct {
 	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id,omitempty"`
 	} `json:"error"`
 }
 
-func writeError(w http.ResponseWriter, err error) {
+func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	ae := toAppError(err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(ae.StatusCode)
 	var env errorEnvelope
 	env.Error.Code = ae.Code
 	env.Error.Message = ae.Message
+	env.Error.RequestID = requestIDFromContext(r.Context())
 	_ = json.NewEncoder(w).Encode(env)
 }
 
@@ -138,14 +211,19 @@ func screenHandler(s *Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req screen.Request
 		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, span := tracing.StartSpan(r.Context(), "screen.Screen",
+			trace.WithSpanKind(trace.SpanKindInternal),
+		)
+		defer span.End()
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		resp, err := s.Screen.Screen(ctx, req)
 		if err != nil {
-			writeError(w, err)
+			tracing.RecordError(ctx, err)
+			writeError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, resp)
@@ -157,7 +235,7 @@ func getAlertHandler(s *Services) http.HandlerFunc {
 		id := r.PathValue("id")
 		a, err := s.Alerts.Get(id)
 		if err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, a)
@@ -169,7 +247,7 @@ func listAlertsHandler(s *Services) http.HandlerFunc {
 		status := r.URL.Query().Get("status")
 		alerts, err := s.Alerts.List(status)
 		if err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"alerts": alerts})
@@ -185,12 +263,12 @@ func assignAlertHandler(s *Services) http.HandlerFunc {
 		id := r.PathValue("id")
 		var req assignRequest
 		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		a, err := s.Alerts.Assign(id, req.Assignee)
 		if err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, a)
@@ -202,12 +280,12 @@ func closeAlertHandler(s *Services) http.HandlerFunc {
 		id := r.PathValue("id")
 		var req assignRequest
 		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		a, err := s.Alerts.Close(id, req.Assignee)
 		if err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, a)
@@ -219,7 +297,7 @@ func webhookHandler(s *Services) http.HandlerFunc {
 		vendor := r.PathValue("vendor")
 		body, err := webhook.ReadBody(r.Body, 1<<20)
 		if err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		sig := r.Header.Get("X-Webhook-Signature")
@@ -237,10 +315,10 @@ func webhookHandler(s *Services) http.HandlerFunc {
 		default:
 			metrics.Global().WebhookRejectTotal.Add(1)
 			if strings.Contains(res.Reason, "signature") {
-				writeError(w, errSigMismatch)
+				writeError(w, r, errSigMismatch)
 				return
 			}
-			writeError(w, newAppError("bad_webhook", res.Reason, http.StatusBadRequest))
+			writeError(w, r, newAppError("bad_webhook", res.Reason, http.StatusBadRequest))
 		}
 	}
 }
