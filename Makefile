@@ -10,7 +10,7 @@ run:
 	go run ./cmd/kyt
 
 lint:
-	go vet ./...
+	golangci-lint run
 
 docker-build:
 	docker build -t ai-crypto-onramp/aml-kyt-screening .
