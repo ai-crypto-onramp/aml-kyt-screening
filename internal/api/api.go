@@ -69,11 +69,9 @@ func newAppError(code, msg string, status int) *AppError {
 
 var (
 	errBadJSON      = newAppError("bad_json", "invalid JSON body", http.StatusBadRequest)
-	errVendorDown   = newAppError("vendor_unavailable", "vendor unavailable", http.StatusBadGateway)
 	errAlertMissing = newAppError("alert_not_found", "alert not found", http.StatusNotFound)
 	errAlertClosed  = newAppError("alert_closed", "alert already closed", http.StatusConflict)
 	errSigMismatch  = newAppError("signature_mismatch", "webhook signature mismatch", http.StatusUnauthorized)
-	errBadWebhook   = newAppError("bad_webhook", "webhook rejected", http.StatusBadRequest)
 )
 
 type errorEnvelope struct {
