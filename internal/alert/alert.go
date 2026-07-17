@@ -4,18 +4,18 @@
 package alert
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Status values for an Alert.
 const (
-	StatusOpen     = "open"
-	StatusInReview = "in_review"
-	StatusClosed   = "closed"
+	StatusOpen     = "OPEN"
+	StatusInReview = "IN_REVIEW"
+	StatusClosed   = "CLOSED"
 )
 
 // Alert is the compliance dashboard payload for a flagged flow.
@@ -56,10 +56,8 @@ func NewService(store Store) *Service {
 }
 
 func newID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	h := hex.EncodeToString(b[:])
-	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
+	id, _ := uuid.NewV7()
+	return id.String()
 }
 
 // WithNow overrides the clock (for testing).

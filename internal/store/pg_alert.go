@@ -139,7 +139,7 @@ func (s *PGAlertStore) Update(a alert.Alert) error {
 	}
 	res, err := s.db.Exec(`
 UPDATE kyt_alerts
-   SET screen_id = $2, tx_id = $3, address = $4, chain = $5, exposure = $6, severity = $7, status = $8, assignee = $9, closed_at = $10
+   SET screen_id = $2, tx_id = $3, address = $4, chain = $5, exposure = $6, severity = $7, status = $8, assignee = $9, closed_at = $10, updated_at = now()
  WHERE id = $1`,
 		a.ID, screenID, a.TxID, a.Address, a.Chain, a.Exposure, a.Severity, a.Status, assignee, closedAt,
 	)

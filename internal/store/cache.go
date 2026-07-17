@@ -43,7 +43,7 @@ type Cache interface {
 // sanctioned TTLs. Sanctioned verdicts use the longer (sanctioned) TTL;
 // any other verdict uses the default TTL.
 func TTLFor(exposure string, defaultTTL, sanctionedTTL time.Duration) time.Duration {
-	if exposure == "sanctioned" {
+	if exposure == "SANCTIONED" {
 		return sanctionedTTL
 	}
 	return defaultTTL

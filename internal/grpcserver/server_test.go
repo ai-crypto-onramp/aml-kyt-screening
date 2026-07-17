@@ -83,7 +83,7 @@ func TestGRPCScreenHappyPath(t *testing.T) {
 func TestGRPCScreenSanctionedBlocks(t *testing.T) {
 	svc := newTestServices(t)
 	mp := vendor.NewMockProvider("chainalysis")
-	mp.SetResponse("0xbad", "ethereum", vendor.MockResponse{RiskScore: 99, Exposure: "sanctioned"})
+	mp.SetResponse("0xbad", "ethereum", vendor.MockResponse{RiskScore: 99, Exposure: "SANCTIONED"})
 	svc.Screen = screen.NewService(screen.NewMemoryCache(time.Hour, 24*time.Hour), mp,
 		decision.NewThresholds(90, 50, decision.DecisionManualReview),
 		screen.NewMemoryScreenStore(), svc.Alerts, svc.Audit)
@@ -118,7 +118,7 @@ func TestGRPCScreenMissingFields(t *testing.T) {
 
 func TestGRPCGetAlertHappyPath(t *testing.T) {
 	svc := newTestServices(t)
-	a, _ := svc.Alerts.Create("scr-1", "tx1", "0xbad", "ethereum", "sanctioned", "critical")
+	a, _ := svc.Alerts.Create("scr-1", "tx1", "0xbad", "ethereum", "SANCTIONED", "critical")
 	srv, lis := startServer(t, svc)
 	defer srv.Stop()
 	client, closeFn := dial(t, lis)
@@ -130,7 +130,7 @@ func TestGRPCGetAlertHappyPath(t *testing.T) {
 	if resp.GetId() != a.ID {
 		t.Errorf("id: %s", resp.GetId())
 	}
-	if resp.GetExposure() != "sanctioned" || resp.GetSeverity() != "critical" {
+	if resp.GetExposure() != "SANCTIONED" || resp.GetSeverity() != "critical" {
 		t.Errorf("alert: %+v", resp)
 	}
 	if resp.GetCreatedAt() == "" {
@@ -251,7 +251,7 @@ func TestToProtoAlertIncludesClosedAt(t *testing.T) {
 	closed := now.Add(time.Hour)
 	a := alert.Alert{
 		ID: "a1", ScreenID: "s1", TxID: "tx1", Address: "0x1", Chain: "ethereum",
-		Exposure: "sanctioned", Severity: "critical", Status: alert.StatusClosed,
+		Exposure: "SANCTIONED", Severity: "critical", Status: alert.StatusClosed,
 		Assignee: "analyst1", CreatedAt: now, ClosedAt: &closed,
 	}
 	got := toProtoAlert(a)

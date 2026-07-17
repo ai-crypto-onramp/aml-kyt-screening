@@ -12,17 +12,17 @@ import (
 
 // Exposure classifications returned by KYT vendors.
 const (
-	ExposureSanctioned = "sanctioned"
-	ExposureHighRisk   = "high_risk"
-	ExposureUnknown    = "unknown"
-	ExposureClean      = "clean"
+	ExposureSanctioned = "SANCTIONED"
+	ExposureHighRisk   = "HIGH_RISK"
+	ExposureUnknown    = "UNKNOWN"
+	ExposureClean      = "CLEAN"
 )
 
 // Decision values returned by the screen endpoint.
 const (
-	DecisionBlock        = "block"
-	DecisionManualReview = "manual_review"
-	DecisionAllow        = "allow"
+	DecisionBlock        = "BLOCK"
+	DecisionManualReview = "MANUAL_REVIEW"
+	DecisionAllow        = "ALLOW"
 )
 
 // Thresholds configures the per-chain and global thresholds used to derive an

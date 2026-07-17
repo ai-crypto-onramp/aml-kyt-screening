@@ -21,7 +21,7 @@ func TestMockProviderDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("screen: %v", err)
 	}
-	if resp.Exposure != "clean" || resp.RiskScore != 0 {
+	if resp.Exposure != "CLEAN" || resp.RiskScore != 0 {
 		t.Fatalf("default response: %+v", resp)
 	}
 	if m.Calls() != 1 {
@@ -31,12 +31,12 @@ func TestMockProviderDefault(t *testing.T) {
 
 func TestMockProviderPresetResponse(t *testing.T) {
 	m := NewMockProvider("trm")
-	m.SetResponse("0xbad", "ethereum", MockResponse{RiskScore: 99, Exposure: "sanctioned"})
+	m.SetResponse("0xbad", "ethereum", MockResponse{RiskScore: 99, Exposure: "SANCTIONED"})
 	resp, err := m.Screen(context.Background(), ScreenRequest{TxID: "tx", Address: "0xbad", Chain: "ethereum"})
 	if err != nil {
 		t.Fatalf("screen: %v", err)
 	}
-	if resp.Exposure != "sanctioned" || resp.RiskScore != 99 {
+	if resp.Exposure != "SANCTIONED" || resp.RiskScore != 99 {
 		t.Fatalf("preset response: %+v", resp)
 	}
 }
@@ -53,7 +53,7 @@ func TestMockProviderFailNextN(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	resp, err := m.Screen(context.Background(), ScreenRequest{TxID: "tx", Address: "0x1", Chain: "ethereum"})
-	if err != nil || resp.Exposure != "clean" {
+	if err != nil || resp.Exposure != "CLEAN" {
 		t.Fatalf("third call: %v %+v", err, resp)
 	}
 }
@@ -104,7 +104,7 @@ func TestCircuitBreakerResetsOnSuccess(t *testing.T) {
 
 func TestIdempotentProviderCachesResponse(t *testing.T) {
 	m := NewMockProvider("chainalysis")
-	m.SetResponse("0xbad", "ethereum", MockResponse{RiskScore: 75, Exposure: "high_risk"})
+	m.SetResponse("0xbad", "ethereum", MockResponse{RiskScore: 75, Exposure: "HIGH_RISK"})
 	store := NewMemoryResponseStore()
 	p := NewIdempotentProvider(m, store)
 
@@ -112,7 +112,7 @@ func TestIdempotentProviderCachesResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("screen: %v", err)
 	}
-	if resp.RiskScore != 75 || resp.Exposure != "high_risk" {
+	if resp.RiskScore != 75 || resp.Exposure != "HIGH_RISK" {
 		t.Fatalf("resp: %+v", resp)
 	}
 	if store.Len() != 1 {
@@ -127,7 +127,7 @@ func TestIdempotentProviderCachesResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("screen2: %v", err)
 	}
-	if resp2.RiskScore != 75 || resp2.Exposure != "high_risk" {
+	if resp2.RiskScore != 75 || resp2.Exposure != "HIGH_RISK" {
 		t.Fatalf("resp2: %+v", resp2)
 	}
 	if m.Calls() != 1 {

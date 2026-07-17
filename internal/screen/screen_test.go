@@ -58,7 +58,7 @@ func TestScreenCleanAllows(t *testing.T) {
 
 func TestScreenSanctionedBlocksAndAlerts(t *testing.T) {
 	mp := vendor.NewMockProvider("chainalysis")
-	mp.SetResponse("0xbad", "ethereum", vendor.MockResponse{RiskScore: 99, Exposure: "sanctioned"})
+	mp.SetResponse("0xbad", "ethereum", vendor.MockResponse{RiskScore: 99, Exposure: "SANCTIONED"})
 	s, _, alertStore, auditSink := newTestService(t, mp)
 	resp, err := s.Screen(context.Background(), Request{TxID: "tx1", Address: "0xbad", Chain: "ethereum", Amount: "100"})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestScreenSanctionedBlocksAndAlerts(t *testing.T) {
 
 func TestScreenHighRiskManualReview(t *testing.T) {
 	mp := vendor.NewMockProvider("chainalysis")
-	mp.SetResponse("0xmid", "ethereum", vendor.MockResponse{RiskScore: 60, Exposure: "high_risk"})
+	mp.SetResponse("0xmid", "ethereum", vendor.MockResponse{RiskScore: 60, Exposure: "HIGH_RISK"})
 	s, _, alertStore, _ := newTestService(t, mp)
 	resp, err := s.Screen(context.Background(), Request{TxID: "tx1", Address: "0xmid", Chain: "ethereum", Amount: "100"})
 	if err != nil {
@@ -99,7 +99,7 @@ func TestScreenCacheHitSkipsVendor(t *testing.T) {
 	s, cache, _, _ := newTestService(t, mp)
 	// Pre-seed cache with a clean verdict.
 	_ = cache.Set(context.Background(), Verdict{
-		Address: "0x1", Chain: "ethereum", RiskScore: 5, Exposure: "clean", Decision: "allow", Vendor: "chainalysis",
+		Address: "0x1", Chain: "ethereum", RiskScore: 5, Exposure: "CLEAN", Decision: "ALLOW", Vendor: "chainalysis",
 	})
 	resp, err := s.Screen(context.Background(), Request{TxID: "tx1", Address: "0x1", Chain: "ethereum", Amount: "100"})
 	if err != nil {
@@ -168,7 +168,7 @@ func TestScreenExposureFromScoreWhenVendorOmitsExposure(t *testing.T) {
 
 func TestMemoryCacheTTLAndDelete(t *testing.T) {
 	c := NewMemoryCache(time.Hour, 24*time.Hour)
-	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "clean", Decision: "allow"})
+	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "CLEAN", Decision: "ALLOW"})
 	if _, ok, _ := c.Get(context.Background(), "0x1", "ethereum"); !ok {
 		t.Fatal("expected hit")
 	}
@@ -183,8 +183,8 @@ func TestMemoryCacheLen(t *testing.T) {
 	if c.Len() != 0 {
 		t.Fatalf("initial len: %d", c.Len())
 	}
-	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "clean", Decision: "allow"})
-	_ = c.Set(context.Background(), Verdict{Address: "0x2", Chain: "ethereum", Exposure: "clean", Decision: "allow"})
+	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "CLEAN", Decision: "ALLOW"})
+	_ = c.Set(context.Background(), Verdict{Address: "0x2", Chain: "ethereum", Exposure: "CLEAN", Decision: "ALLOW"})
 	if c.Len() != 2 {
 		t.Fatalf("len after set: %d", c.Len())
 	}
@@ -197,7 +197,7 @@ func TestMemoryCacheLen(t *testing.T) {
 func TestMemoryCacheExpired(t *testing.T) {
 	now := time.Now()
 	c := NewMemoryCache(time.Hour, 24*time.Hour).WithNow(func() time.Time { return now })
-	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "clean", Decision: "allow"})
+	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "CLEAN", Decision: "ALLOW"})
 	// Advance past TTL.
 	c.WithNow(func() time.Time { return now.Add(2 * time.Hour) })
 	if _, ok, _ := c.Get(context.Background(), "0x1", "ethereum"); ok {
@@ -208,7 +208,7 @@ func TestMemoryCacheExpired(t *testing.T) {
 func TestMemoryCacheSanctionedTTL(t *testing.T) {
 	now := time.Now()
 	c := NewMemoryCache(time.Hour, 24*time.Hour).WithNow(func() time.Time { return now })
-	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "sanctioned", Decision: "block"})
+	_ = c.Set(context.Background(), Verdict{Address: "0x1", Chain: "ethereum", Exposure: "SANCTIONED", Decision: "BLOCK"})
 	// 2h later: default TTL would have expired, sanctioned TTL still valid.
 	c.WithNow(func() time.Time { return now.Add(2 * time.Hour) })
 	if _, ok, _ := c.Get(context.Background(), "0x1", "ethereum"); !ok {

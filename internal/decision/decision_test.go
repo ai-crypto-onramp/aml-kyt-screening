@@ -94,7 +94,7 @@ func TestDecideVendorUnreachableNeverAllows(t *testing.T) {
 func TestDefaultThresholdsFromEnv(t *testing.T) {
 	t.Setenv("BLOCK_THRESHOLD", "80")
 	t.Setenv("HIGH_RISK_THRESHOLD", "40")
-	t.Setenv("UNKNOWN_DECISION", "block")
+	t.Setenv("UNKNOWN_DECISION", "BLOCK")
 	t.Setenv("BLOCK_THRESHOLD_BITCOIN", "70")
 	t.Setenv("HIGH_RISK_THRESHOLD_BITCOIN", "30")
 	th := DefaultThresholds()

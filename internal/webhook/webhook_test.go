@@ -79,7 +79,7 @@ func TestProcessorIngestValid(t *testing.T) {
 	alerts := alert.NewService(alert.NewMemoryStore())
 	p := NewProcessor(v, cache, alerts)
 
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned","tx_id":"tx1"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED","tx_id":"tx1"}`)
 	res := p.Ingest(context.Background(), "chainalysis", body, sign([]byte("secret"), body))
 	if !res.Accepted {
 		t.Fatalf("expected accepted, got %+v", res)
@@ -88,7 +88,7 @@ func TestProcessorIngestValid(t *testing.T) {
 		t.Error("cache not invalidated")
 	}
 	open, _ := alerts.List(alert.StatusOpen)
-	if len(open) != 1 || open[0].Exposure != "sanctioned" || open[0].Severity != "critical" {
+	if len(open) != 1 || open[0].Exposure != "SANCTIONED" || open[0].Severity != "critical" {
 		t.Fatalf("alerts: %+v", open)
 	}
 }
@@ -98,7 +98,7 @@ func TestProcessorIngestTampered(t *testing.T) {
 	cache := &mockCache{}
 	alerts := alert.NewService(alert.NewMemoryStore())
 	p := NewProcessor(v, cache, alerts)
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED"}`)
 	res := p.Ingest(context.Background(), "chainalysis", body, "bad-sig")
 	if res.Accepted {
 		t.Fatal("tampered payload must not be accepted")
@@ -118,7 +118,7 @@ func TestProcessorIngestDuplicate(t *testing.T) {
 	alerts := alert.NewService(alert.NewMemoryStore())
 	p := NewProcessor(v, cache, alerts)
 
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED"}`)
 	sig := sign([]byte("secret"), body)
 	if res := p.Ingest(context.Background(), "chainalysis", body, sig); !res.Accepted {
 		t.Fatalf("first ingest: %+v", res)
@@ -157,7 +157,7 @@ func TestProcessorIngestCacheError(t *testing.T) {
 	v := NewVerifier(map[string][]byte{"chainalysis": []byte("secret")})
 	cache := &mockCache{err: errors.New("cache down")}
 	p := NewProcessor(v, cache, alert.NewService(alert.NewMemoryStore()))
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED"}`)
 	res := p.Ingest(context.Background(), "chainalysis", body, sign([]byte("secret"), body))
 	if res.Accepted {
 		t.Fatal("expected rejection on cache error")
@@ -170,7 +170,7 @@ func TestProcessorIngestCacheError(t *testing.T) {
 func TestProcessorIngestSynthesizesEventID(t *testing.T) {
 	v := NewVerifier(map[string][]byte{"chainalysis": []byte("secret")})
 	p := NewProcessor(v, &mockCache{}, alert.NewService(alert.NewMemoryStore()))
-	body := []byte(`{"address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	body := []byte(`{"address":"0x1","chain":"ethereum","exposure":"SANCTIONED"}`)
 	res := p.Ingest(context.Background(), "chainalysis", body, sign([]byte("secret"), body))
 	if !res.Accepted {
 		t.Fatalf("expected accepted, got %+v", res)
@@ -226,7 +226,7 @@ func TestProcessorWithReviewerTriggersOnAccept(t *testing.T) {
 	rv := &mockReviewer{}
 	p := NewProcessor(v, cache, alerts).WithReviewer(rv)
 
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned","tx_id":"tx1"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED","tx_id":"tx1"}`)
 	res := p.Ingest(context.Background(), "chainalysis", body, sign([]byte("secret"), body))
 	if !res.Accepted {
 		t.Fatalf("expected accepted, got %+v", res)
@@ -236,7 +236,7 @@ func TestProcessorWithReviewerTriggersOnAccept(t *testing.T) {
 	for {
 		called, addr, chain, exp, txID := rv.snapshot()
 		if called {
-			if addr != "0x1" || chain != "ethereum" || exp != "sanctioned" || txID != "tx1" {
+			if addr != "0x1" || chain != "ethereum" || exp != "SANCTIONED" || txID != "tx1" {
 				t.Errorf("reviewer args: addr=%s chain=%s exp=%s txID=%s", addr, chain, exp, txID)
 			}
 			break
@@ -253,7 +253,7 @@ func TestProcessorWithReviewerNotTriggeredOnTamper(t *testing.T) {
 	alerts := alert.NewService(alert.NewMemoryStore())
 	rv := &mockReviewer{}
 	p := NewProcessor(v, &mockCache{}, alerts).WithReviewer(rv)
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED"}`)
 	_ = p.Ingest(context.Background(), "chainalysis", body, "bad-sig")
 	called, _, _, _, _ := rv.snapshot()
 	if called {

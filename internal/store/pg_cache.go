@@ -83,7 +83,8 @@ ON CONFLICT (address, chain) DO UPDATE SET
   vendor      = EXCLUDED.vendor,
   cached_at   = EXCLUDED.cached_at,
   ttl_seconds = EXCLUDED.ttl_seconds,
-  expires_at  = EXCLUDED.expires_at`,
+  expires_at  = EXCLUDED.expires_at,
+  updated_at  = now()`,
 		v.Address, v.Chain, v.RiskScore, v.Exposure, v.Decision, v.Vendor,
 		v.CachedAt, v.TTLSeconds, v.ExpiresAt,
 	)

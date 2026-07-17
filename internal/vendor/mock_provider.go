@@ -74,7 +74,7 @@ func (m *MockProvider) Screen(ctx context.Context, req ScreenRequest) (ScreenRes
 		return ScreenResponse{
 			Vendor:    m.name,
 			RiskScore: 0,
-			Exposure:  "clean",
+			Exposure:  "CLEAN",
 		}, nil
 	}
 	if r.Err != nil {

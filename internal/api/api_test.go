@@ -97,7 +97,7 @@ func TestScreenHandlerValidation(t *testing.T) {
 
 func TestGetAlertHandler(t *testing.T) {
 	s := newTestServices(t)
-	a, _ := s.Alerts.Create("", "tx1", "0xbad", "ethereum", "sanctioned", "critical")
+	a, _ := s.Alerts.Create("", "tx1", "0xbad", "ethereum", "SANCTIONED", "critical")
 	req := httptest.NewRequest(http.MethodGet, "/v1/kyt/alerts/"+a.ID, nil)
 	rec := httptest.NewRecorder()
 	NewMux(s).ServeHTTP(rec, req)
@@ -125,9 +125,9 @@ func TestGetAlertHandlerNotFound(t *testing.T) {
 
 func TestListAlertsHandler(t *testing.T) {
 	s := newTestServices(t)
-	_, _ = s.Alerts.Create("", "tx1", "0x1", "ethereum", "high_risk", "high")
-	_, _ = s.Alerts.Create("", "tx2", "0x2", "ethereum", "sanctioned", "critical")
-	req := httptest.NewRequest(http.MethodGet, "/v1/kyt/alerts?status=open", nil)
+	_, _ = s.Alerts.Create("", "tx1", "0x1", "ethereum", "HIGH_RISK", "high")
+	_, _ = s.Alerts.Create("", "tx2", "0x2", "ethereum", "SANCTIONED", "critical")
+	req := httptest.NewRequest(http.MethodGet, "/v1/kyt/alerts?status=OPEN", nil)
 	rec := httptest.NewRecorder()
 	NewMux(s).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -146,7 +146,7 @@ func TestListAlertsHandler(t *testing.T) {
 
 func TestAssignAndCloseAlertHandler(t *testing.T) {
 	s := newTestServices(t)
-	a, _ := s.Alerts.Create("", "tx1", "0x1", "ethereum", "high_risk", "high")
+	a, _ := s.Alerts.Create("", "tx1", "0x1", "ethereum", "HIGH_RISK", "high")
 	body := bytes.NewBufferString(`{"assignee":"analyst1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/kyt/alerts/"+a.ID+"/assign", body)
 	rec := httptest.NewRecorder()
@@ -170,7 +170,7 @@ func TestAssignAndCloseAlertHandler(t *testing.T) {
 
 func TestCloseAlertAlreadyClosed(t *testing.T) {
 	s := newTestServices(t)
-	a, _ := s.Alerts.Create("", "tx1", "0x1", "ethereum", "high_risk", "high")
+	a, _ := s.Alerts.Create("", "tx1", "0x1", "ethereum", "HIGH_RISK", "high")
 	_, _ = s.Alerts.Close(a.ID, "")
 	body := bytes.NewBufferString(`{"assignee":""}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/kyt/alerts/"+a.ID+"/close", body)
@@ -189,7 +189,7 @@ func signBody(secret, body []byte) string {
 
 func TestWebhookHandlerValid(t *testing.T) {
 	s := newTestServices(t)
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned","tx_id":"tx1"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED","tx_id":"tx1"}`)
 	sig := signBody([]byte("secret"), body)
 	req := httptest.NewRequest(http.MethodPost, "/v1/webhooks/chainalysis", bytes.NewReader(body))
 	req.Header.Set("X-Webhook-Signature", sig)
@@ -202,7 +202,7 @@ func TestWebhookHandlerValid(t *testing.T) {
 
 func TestWebhookHandlerTampered(t *testing.T) {
 	s := newTestServices(t)
-	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	body := []byte(`{"event_id":"e1","address":"0x1","chain":"ethereum","exposure":"SANCTIONED"}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/webhooks/chainalysis", bytes.NewReader(body))
 	req.Header.Set("X-Webhook-Signature", "bad-sig")
 	rec := httptest.NewRecorder()
@@ -214,7 +214,7 @@ func TestWebhookHandlerTampered(t *testing.T) {
 
 func TestWebhookHandlerDuplicate(t *testing.T) {
 	s := newTestServices(t)
-	body := []byte(`{"event_id":"dup","address":"0x1","chain":"ethereum","exposure":"sanctioned"}`)
+	body := []byte(`{"event_id":"dup","address":"0x1","chain":"ethereum","exposure":"SANCTIONED"}`)
 	sig := signBody([]byte("secret"), body)
 
 	mkReq := func() *http.Request {

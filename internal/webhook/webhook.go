@@ -164,11 +164,11 @@ func (p *Processor) triggerReview(ctx context.Context, rec Reclassification) {
 // alertSeverity maps an exposure to an alert severity.
 func alertSeverity(exposure string) string {
 	switch exposure {
-	case "sanctioned":
+	case "SANCTIONED":
 		return "critical"
-	case "high_risk":
+	case "HIGH_RISK":
 		return "high"
-	case "unknown":
+	case "UNKNOWN":
 		return "medium"
 	default:
 		return "low"

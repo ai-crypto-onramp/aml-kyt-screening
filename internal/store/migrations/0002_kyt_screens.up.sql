@@ -1,5 +1,7 @@
+-- Conventions: UUID PKs (app-generated UUIDv7, no DB default), UPPER_CASE enum
+-- TEXT (no CHECK), created_at + updated_at on every table, no DB triggers.
 CREATE TABLE IF NOT EXISTS kyt_screens (
-    screen_id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    screen_id          UUID         PRIMARY KEY,
     tx_id              TEXT         NOT NULL,
     address            TEXT         NOT NULL,
     source_address     TEXT,
@@ -11,7 +13,8 @@ CREATE TABLE IF NOT EXISTS kyt_screens (
     vendor             TEXT         NOT NULL,
     vendor_response_id UUID,
     cache_hit          BOOLEAN      NOT NULL DEFAULT FALSE,
-    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
+    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_kyt_screens_tx_id

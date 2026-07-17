@@ -5,8 +5,6 @@ package screen
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -19,6 +17,7 @@ import (
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/decision"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/metrics"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/vendor"
+	"github.com/google/uuid"
 )
 
 // Request is the input to the synchronous screen path.
@@ -127,10 +126,8 @@ func (s *Service) WithID(id func() string) *Service {
 }
 
 func newID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	h := hex.EncodeToString(b[:])
-	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
+	id, _ := uuid.NewV7()
+	return id.String()
 }
 
 // Screen runs the synchronous screen path.

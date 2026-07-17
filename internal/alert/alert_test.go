@@ -8,7 +8,7 @@ import (
 
 func TestServiceCreate(t *testing.T) {
 	s := NewService(NewMemoryStore()).WithID(func() string { return "a1" })
-	a, err := s.Create("screen1", "tx1", "0xbad", "ethereum", "sanctioned", "critical")
+	a, err := s.Create("screen1", "tx1", "0xbad", "ethereum", "SANCTIONED", "critical")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestServiceCreate(t *testing.T) {
 
 func TestServiceCreateDefaultSeverity(t *testing.T) {
 	s := NewService(NewMemoryStore()).WithID(func() string { return "a1" })
-	a, err := s.Create("", "tx1", "0xbad", "ethereum", "unknown", "")
+	a, err := s.Create("", "tx1", "0xbad", "ethereum", "UNKNOWN", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestServiceGetNotFound(t *testing.T) {
 
 func TestServiceAssignAndClose(t *testing.T) {
 	s := NewService(NewMemoryStore()).WithID(func() string { return "a1" })
-	if _, err := s.Create("", "tx1", "0xbad", "ethereum", "high_risk", "high"); err != nil {
+	if _, err := s.Create("", "tx1", "0xbad", "ethereum", "HIGH_RISK", "high"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	a, err := s.Assign("a1", "analyst1")
@@ -62,7 +62,7 @@ func TestServiceAssignAndClose(t *testing.T) {
 
 func TestServiceCloseAlreadyClosed(t *testing.T) {
 	s := NewService(NewMemoryStore()).WithID(func() string { return "a1" })
-	_, _ = s.Create("", "tx1", "0xbad", "ethereum", "high_risk", "high")
+	_, _ = s.Create("", "tx1", "0xbad", "ethereum", "HIGH_RISK", "high")
 	_, _ = s.Close("a1", "")
 	_, err := s.Close("a1", "")
 	if !errors.Is(err, ErrAlreadyClosed) {
@@ -77,11 +77,11 @@ func TestServiceCloseAlreadyClosed(t *testing.T) {
 func TestServiceListByStatus(t *testing.T) {
 	store := NewMemoryStore()
 	s := NewService(store).WithID(func() string { return "a1" })
-	_, _ = s.Create("", "tx1", "0xbad", "ethereum", "high_risk", "high")
+	_, _ = s.Create("", "tx1", "0xbad", "ethereum", "HIGH_RISK", "high")
 	s2 := NewService(store).WithID(func() string { return "a2" })
-	_, _ = s2.Create("", "tx2", "0xbad2", "ethereum", "sanctioned", "critical")
+	_, _ = s2.Create("", "tx2", "0xbad2", "ethereum", "SANCTIONED", "critical")
 	s3 := NewService(store).WithID(func() string { return "a3" })
-	_, _ = s3.Create("", "tx3", "0xbad3", "ethereum", "high_risk", "high")
+	_, _ = s3.Create("", "tx3", "0xbad3", "ethereum", "HIGH_RISK", "high")
 	_, _ = s3.Close("a3", "")
 
 	open, err := s.List(StatusOpen)

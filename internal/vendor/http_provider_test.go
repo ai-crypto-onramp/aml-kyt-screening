@@ -20,7 +20,7 @@ func TestHTTPProviderSuccess(t *testing.T) {
 		if r.Header.Get("X-Idempotency-Key") == "" {
 			t.Errorf("missing idempotency header")
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"risk_score": 42, "exposure": "high_risk"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"risk_score": 42, "exposure": "HIGH_RISK"})
 	}))
 	defer srv.Close()
 
@@ -29,7 +29,7 @@ func TestHTTPProviderSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("screen: %v", err)
 	}
-	if resp.RiskScore != 42 || resp.Exposure != "high_risk" {
+	if resp.RiskScore != 42 || resp.Exposure != "HIGH_RISK" {
 		t.Fatalf("resp: %+v", resp)
 	}
 	if resp.Vendor != "chainalysis" {
@@ -94,11 +94,11 @@ func TestTRMEncoderDecoder(t *testing.T) {
 	if string(body) == "" {
 		t.Fatal("empty body")
 	}
-	resp, err := TRMDecoder("trm", ScreenRequest{}, []byte(`{"riskScore":55,"exposure":"high_risk"}`))
+	resp, err := TRMDecoder("trm", ScreenRequest{}, []byte(`{"riskScore":55,"exposure":"HIGH_RISK"}`))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.RiskScore != 55 || resp.Exposure != "high_risk" || resp.Vendor != "trm" {
+	if resp.RiskScore != 55 || resp.Exposure != "HIGH_RISK" || resp.Vendor != "trm" {
 		t.Fatalf("resp: %+v", resp)
 	}
 }

@@ -57,7 +57,7 @@ func (c *MemoryCache) Set(_ context.Context, v Verdict) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ttl := c.defaultTTL
-	if v.Exposure == "sanctioned" {
+	if v.Exposure == "SANCTIONED" {
 		ttl = c.sanctionedTTL
 	}
 	c.mem[cacheKey(v.Address, v.Chain)] = cacheEntry{verdict: v, expiresAt: c.now().Add(ttl)}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 // DBSink appends audit events to an audit_events table. It is the DB fallback
@@ -21,11 +23,12 @@ func NewDBSink(db *sql.DB) *DBSink {
 
 // Emit inserts e into the audit_events table.
 func (s *DBSink) Emit(ctx context.Context, e Event) error {
+	id, _ := uuid.NewV7()
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO audit_events
-  (screen_id, tx_id, address, chain, amount, decision, exposure, risk_score, vendor, cache_hit, source, operator, created_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-		e.ScreenID, e.TxID, e.Address, e.Chain, e.Amount, e.Decision, e.Exposure,
+  (id, screen_id, tx_id, address, chain, amount, decision, exposure, risk_score, vendor, cache_hit, source, operator, created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+		id, e.ScreenID, e.TxID, e.Address, e.Chain, e.Amount, e.Decision, e.Exposure,
 		e.RiskScore, e.Vendor, e.CacheHit, e.Source, e.Operator, e.CreatedAt,
 	)
 	if err != nil {

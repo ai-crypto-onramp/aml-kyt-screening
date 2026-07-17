@@ -3,8 +3,6 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,6 +16,7 @@ import (
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/screen"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/tracing"
 	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/webhook"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -70,9 +69,8 @@ func requestIDFromContext(ctx context.Context) string {
 }
 
 func newRequestID() string {
-	var b [8]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	id, _ := uuid.NewV7()
+	return id.String()
 }
 
 // requestIDMiddleware propagates an existing X-Request-Id or generates a new

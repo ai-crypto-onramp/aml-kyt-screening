@@ -12,10 +12,10 @@ func TestTTLFor(t *testing.T) {
 		exposure string
 		want     time.Duration
 	}{
-		{"sanctioned", san},
-		{"clean", def},
-		{"unknown", def},
-		{"high_risk", def},
+		{"SANCTIONED", san},
+		{"CLEAN", def},
+		{"UNKNOWN", def},
+		{"HIGH_RISK", def},
 		{"", def},
 	}
 	for _, c := range cases {
