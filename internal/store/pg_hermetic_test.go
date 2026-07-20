@@ -19,7 +19,7 @@ import (
 type errDriver struct{ err error }
 
 func (d errDriver) Open(_ string) (driver.Conn, error) {
-	return errConn{err: d.err}, nil
+	return errConn(d), nil
 }
 
 type errConn struct{ err error }
