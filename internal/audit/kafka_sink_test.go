@@ -64,7 +64,7 @@ func TestNewKafkaSinkFromURLParsesTopic(t *testing.T) {
 }
 
 func TestKafkaSinkEmitOnClosedWriter(t *testing.T) {
-	sink := &KafkaSink{topic: "kyt.audit.v1"}
+	sink := &KafkaSink{topic: "audit.v1"}
 	if err := sink.Emit(context.Background(), Event{ScreenID: "s1"}); err == nil {
 		t.Fatal("expected error emitting on nil writer")
 	}

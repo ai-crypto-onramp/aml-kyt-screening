@@ -2,19 +2,23 @@ package audit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 )
 
 // DefaultAuditTopic is the Kafka topic audit events are published to when
 // AUDIT_EVENT_BUS_URL is set and no topic is configured via
-// AUDIT_EVENT_BUS_TOPIC.
-const DefaultAuditTopic = "kyt.audit.v1"
+// AUDIT_EVENT_BUS_TOPIC. The canonical audit topic is audit.v1 (consumed
+// by audit-event-log); see .github/contracts/asyncapi/audit/v1/asyncapi.yaml.
+const DefaultAuditTopic = "audit.v1"
 
 // NewSink selects an audit Sink based on url:
 //   - "" or "memory://" -> MemorySink (DB-less / testing fallback)
@@ -101,18 +105,44 @@ func NewKafkaSinkFromURL(url, defaultTopic string) (*KafkaSink, error) {
 	return NewKafkaSink(brokers, topic)
 }
 
-// Emit JSON-encodes e and publishes it to the configured Kafka topic.
+// Emit JSON-encodes e into the canonical audit.v1 envelope and publishes it
+// to the configured Kafka topic. See .github/contracts/asyncapi/audit/v1/asyncapi.yaml.
 func (s *KafkaSink) Emit(ctx context.Context, e Event) error {
 	if s.writer == nil {
 		return fmt.Errorf("audit kafka: not connected")
 	}
-	body, err := json.Marshal(e)
+	payload, err := json.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("audit kafka encode: %w", err)
+	}
+	sum := sha256.Sum256(payload)
+	payloadHash := "sha256:" + hex.EncodeToString(sum[:])
+	id := uuid.NewString()
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = time.Now().UTC()
+	}
+	envelope := map[string]any{
+		"schema_version":  "1",
+		"id":               id,
+		"ts":               e.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"source_service":   "aml-kyt-screening",
+		"actor_id":         coalesce(e.Operator, "aml-kyt-screening"),
+		"action":           "kyt.screen",
+		"target_type":      "transaction",
+		"target_id":        coalesce(e.TxID, e.ScreenID, e.Address),
+		"payload_hash":     payloadHash,
+		"payload":          json.RawMessage(payload),
+	}
+	body, err := json.Marshal(envelope)
+	if err != nil {
+		return fmt.Errorf("audit kafka envelope encode: %w", err)
 	}
 	key := e.ScreenID
 	if key == "" {
 		key = e.TxID
+	}
+	if key == "" {
+		key = id
 	}
 	if err := s.writer.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(key),
@@ -122,6 +152,15 @@ func (s *KafkaSink) Emit(ctx context.Context, e Event) error {
 	}
 	s.sent.Add(1)
 	return nil
+}
+
+func coalesce(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // Close flushes and closes the underlying writer.

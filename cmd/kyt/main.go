@@ -108,6 +108,7 @@ func run(ctx context.Context) error {
 // service still boots for local development. The returned cleanup function
 // releases DB/cache resources and must be called by the caller when done.
 func buildServices(ctx context.Context, cfg store.Config) (*api.Services, func(), error) {
+	devMode := os.Getenv("DEV_MODE") == "1"
 	cache, db, cleanup, err := openCache(ctx, cfg)
 	if err != nil {
 		return nil, nil, err
@@ -119,7 +120,14 @@ func buildServices(ctx context.Context, cfg store.Config) (*api.Services, func()
 		provider = vendor.NewIdempotentProvider(provider, vendor.NewMemoryResponseStore())
 	}
 	if provider == nil {
-		provider = vendor.NewMockProvider("mock")
+		if devMode {
+			provider = vendor.NewMockProvider("mock")
+		} else {
+			if os.Getenv("KYT_PROVIDER_URL") == "" && os.Getenv("CHAINALYSIS_API_KEY") == "" && os.Getenv("TRM_API_KEY") == "" {
+				log.Fatalf("KYT_PROVIDER_URL (or CHAINALYSIS_API_KEY / TRM_API_KEY) required in production mode; real KYT provider not yet implemented — set DEV_MODE=1 for local dev")
+			}
+			provider = vendor.NewMockProvider("mock")
+		}
 	}
 
 	thresholds := decision.DefaultThresholds()
@@ -189,9 +197,13 @@ func buildAuditSink(ctx context.Context, db *sql.DB) (audit.Sink, func(), error)
 }
 
 // openCache opens the DB and cache. When DB_URL is unset it returns an
-// in-memory cache and a nil db.
+// in-memory cache and a nil db, but only in DEV_MODE=1; in production DB_URL
+// is required.
 func openCache(ctx context.Context, cfg store.Config) (screen.Cache, *sql.DB, func(), error) {
 	if cfg.DBURL == "" {
+		if os.Getenv("DEV_MODE") != "1" {
+			return nil, nil, nil, fmt.Errorf("DB_URL not set and DEV_MODE!=1; refusing to start in production mode")
+		}
 		return screen.NewMemoryCache(cfg.CacheTTL, cfg.SanctionedCacheTTL), nil, nil, nil
 	}
 	db, err := store.Open(ctx, cfg)
