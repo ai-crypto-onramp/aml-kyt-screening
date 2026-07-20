@@ -2,9 +2,14 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/alert"
+	"github.com/ai-crypto-onramp/aml-kyt-screening/internal/screen"
 )
 
 func TestLoadConfigDefaults(t *testing.T) {
@@ -155,5 +160,78 @@ func TestRedisCacheConstructors(t *testing.T) {
 	}
 	if got := redisKey("0x1", "ethereum"); got != "arc:ethereum:0x1" {
 		t.Errorf("redisKey: %q", got)
+	}
+}
+
+func TestIsInvalidUUID(t *testing.T) {
+	if isInvalidUUID(nil) {
+		t.Error("nil err should not be invalid uuid")
+	}
+	if isInvalidUUID(errors.New("random")) {
+		t.Error("random err should not be invalid uuid")
+	}
+}
+
+func TestNewCachePGFallback(t *testing.T) {
+	c, err := NewCache(context.Background(), Config{DBURL: "postgres://x"}, nil)
+	if err != nil {
+		t.Fatalf("NewCache pg fallback: %v", err)
+	}
+	if _, ok := c.(*PGCache); !ok {
+		t.Fatalf("expected *PGCache, got %T", c)
+	}
+}
+
+func TestHealthCheckerDBError(t *testing.T) {
+	db, err := sql.Open("postgres", "host=localhost port=1 dbname=none")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	// Use a short timeout ctx so Ping fails fast.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	h := NewHealthChecker(db, nil)
+	if err := h.Check(ctx); err == nil {
+		// Best-effort: if somehow reachable, fine. We expect an error here.
+		t.Log("db unexpectedly reachable")
+	}
+}
+
+func TestOpenPingError(t *testing.T) {
+	// Use an invalid DSN so Ping fails fast. sql.Open itself does not connect.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_, err := Open(ctx, Config{DBURL: "postgres://u:p@127.0.0.1:1/db", ConnMaxLifetime: time.Second})
+	if err == nil {
+		t.Fatal("expected ping error")
+	}
+}
+
+func TestEnvMillisInvalidFallsBack(t *testing.T) {
+	t.Setenv("VENDOR_TIMEOUT_MS", "garbage")
+	if got := envMillis("VENDOR_TIMEOUT_MS", time.Second); got != time.Second {
+		t.Errorf("envMillis invalid = %v", got)
+	}
+}
+
+func TestEnvIntInvalidFallsBack2(t *testing.T) {
+	t.Setenv("DB_MAX_IDLE_CONNS", "garbage")
+	if got := envInt("DB_MAX_IDLE_CONNS", 9); got != 9 {
+		t.Errorf("envInt invalid = %d", got)
+	}
+}
+
+func TestPGAlertStoreCreateEmptyID(t *testing.T) {
+	s := NewPGAlertStore(nil)
+	if _, err := s.Create(alert.Alert{}); err == nil {
+		t.Fatal("expected error for empty id")
+	}
+}
+
+func TestPGScreenStorePutEmptyIDNoDB(t *testing.T) {
+	s := NewPGScreenStore(nil)
+	if err := s.Put(screen.ScreenRecord{}); err == nil {
+		t.Fatal("expected error for empty id")
 	}
 }

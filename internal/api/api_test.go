@@ -269,6 +269,78 @@ func TestToAppErrorDefaults(t *testing.T) {
 	}
 }
 
+func TestAppErrorError(t *testing.T) {
+	ae := &AppError{Code: "x", Message: "boom", StatusCode: 500}
+	if got := ae.Error(); got != "boom" {
+		t.Errorf("Error() = %q want %q", got, "boom")
+	}
+}
+
+func TestListAlertsHandlerError(t *testing.T) {
+	s := newTestServices(t)
+	// Replace Alerts with a service backed by a failing store.
+	s.Alerts = alert.NewService(&failListStore{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/kyt/alerts", nil)
+	rec := httptest.NewRecorder()
+	NewMux(s).ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status: %d", rec.Code)
+	}
+}
+
+func TestAssignHandlerBadJSON(t *testing.T) {
+	s := newTestServices(t)
+	a, _ := s.Alerts.Create("", "tx1", "0x1", "ethereum", "HIGH_RISK", "high")
+	req := httptest.NewRequest(http.MethodPost, "/v1/kyt/alerts/"+a.ID+"/assign", bytes.NewBufferString("not-json"))
+	rec := httptest.NewRecorder()
+	NewMux(s).ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d", rec.Code)
+	}
+}
+
+func TestAssignHandlerNotFound(t *testing.T) {
+	s := newTestServices(t)
+	req := httptest.NewRequest(http.MethodPost, "/v1/kyt/alerts/nope/assign", bytes.NewBufferString(`{"assignee":"x"}`))
+	rec := httptest.NewRecorder()
+	NewMux(s).ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status: %d", rec.Code)
+	}
+}
+
+func TestCloseHandlerBadJSON(t *testing.T) {
+	s := newTestServices(t)
+	a, _ := s.Alerts.Create("", "tx1", "0x1", "ethereum", "HIGH_RISK", "high")
+	req := httptest.NewRequest(http.MethodPost, "/v1/kyt/alerts/"+a.ID+"/close", bytes.NewBufferString("not-json"))
+	rec := httptest.NewRecorder()
+	NewMux(s).ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d", rec.Code)
+	}
+}
+
+func TestWebhookHandlerEmptyBody(t *testing.T) {
+	s := newTestServices(t)
+	req := httptest.NewRequest(http.MethodPost, "/v1/webhooks/chainalysis", bytes.NewReader(nil))
+	rec := httptest.NewRecorder()
+	NewMux(s).ServeHTTP(rec, req)
+	// Empty body -> decode fails before reaching webhook logic. But webhook
+	// handler uses ReadBody, not decodeJSON; empty body yields empty payload.
+	if rec.Code < 400 && rec.Code != http.StatusOK {
+		t.Fatalf("status: %d", rec.Code)
+	}
+}
+
+type failListStore struct{}
+
+func (s *failListStore) Create(a alert.Alert) (alert.Alert, error) { return a, nil }
+func (s *failListStore) Get(id string) (alert.Alert, bool, error)  { return alert.Alert{}, false, nil }
+func (s *failListStore) List(status string) ([]alert.Alert, error) {
+	return nil, errors.New("list failed")
+}
+func (s *failListStore) Update(a alert.Alert) error { return nil }
+
 func TestDecodeJSONEmptyBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(nil))
 	if err := decodeJSON(req, &struct{}{}); !errors.Is(err, errBadJSON) {

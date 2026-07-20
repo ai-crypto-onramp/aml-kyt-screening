@@ -221,3 +221,83 @@ func TestTRMDecoderInvalidJSON(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestEnvDurationParsesGoDuration(t *testing.T) {
+	t.Setenv("OTHER_DURATION_MS", "5s")
+	if got := envDuration("OTHER_DURATION_MS", time.Second); got != 5*time.Second {
+		t.Errorf("envDuration 5s = %v", got)
+	}
+}
+
+func TestEnvDurationInvalidFallsBack(t *testing.T) {
+	t.Setenv("OTHER_DURATION_MS", "garbage")
+	if got := envDuration("OTHER_DURATION_MS", 2*time.Second); got != 2*time.Second {
+		t.Errorf("envDuration garbage = %v", got)
+	}
+}
+
+func TestEnvIntInvalidFallsBack(t *testing.T) {
+	t.Setenv("SOME_INT", "not-a-number")
+	if got := envInt("SOME_INT", 7); got != 7 {
+		t.Errorf("envInt invalid = %d", got)
+	}
+}
+
+func TestEnvOrReturnsDefault(t *testing.T) {
+	t.Setenv("SOME_OR_KEY", "")
+	if got := envOr("SOME_OR_KEY", "def"); got != "def" {
+		t.Errorf("envOr empty = %q", got)
+	}
+}
+
+func TestOsGetenvReturnsValue(t *testing.T) {
+	t.Setenv("SOME_OSG_KEY", "val")
+	if got := osGetenv("SOME_OSG_KEY"); got != "val" {
+		t.Errorf("osGetenv = %q", got)
+	}
+}
+
+func TestNewCircuitBreakerDefaults(t *testing.T) {
+	b := NewCircuitBreaker(0, 0)
+	if b.Threshold != 5 {
+		t.Errorf("default threshold: %d", b.Threshold)
+	}
+	if b.OpenFor != 60*time.Second {
+		t.Errorf("default openFor: %v", b.OpenFor)
+	}
+}
+
+func TestCircuitBreakerHalfOpenBlocksSecondProbe(t *testing.T) {
+	b := NewCircuitBreaker(1, 10*time.Millisecond)
+	// Force open.
+	if err := b.Execute(context.Background(), func(ctx context.Context) error { return errors.New("boom") }); err == nil {
+		t.Fatal("expected error")
+	}
+	if b.State() != CircuitOpen {
+		t.Fatalf("expected open, got %d", b.State())
+	}
+	// Wait past OpenFor so Allow transitions to half-open and allows one probe.
+	time.Sleep(15 * time.Millisecond)
+	if !b.Allow() {
+		t.Fatal("first half-open probe should be allowed")
+	}
+	// A second probe before recovery must be blocked.
+	if b.Allow() {
+		t.Fatal("second half-open probe should be blocked")
+	}
+}
+
+func TestCircuitBreakerRecordFailureInHalfOpenReopens(t *testing.T) {
+	b := NewCircuitBreaker(1, 5*time.Millisecond)
+	// Open it.
+	_ = b.Execute(context.Background(), func(ctx context.Context) error { return errors.New("boom") })
+	time.Sleep(10 * time.Millisecond)
+	// Transition to half-open via State(), then fail a probe.
+	if b.State() != CircuitHalfOpen {
+		t.Fatalf("expected half-open, got %d", b.State())
+	}
+	_ = b.Execute(context.Background(), func(ctx context.Context) error { return errors.New("still bad") })
+	if b.State() != CircuitOpen {
+		t.Fatalf("expected open after half-open failure, got %d", b.State())
+	}
+}

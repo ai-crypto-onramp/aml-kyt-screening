@@ -2,6 +2,8 @@ package audit
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"strings"
 	"testing"
@@ -92,4 +94,104 @@ func TestEmitterRecordsSinkFailuresFromCustomSink(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
+}
+
+func TestNewSinkPlainBrokerList(t *testing.T) {
+	sink, err := NewSink("broker1:9092,broker2:9092")
+	if err != nil {
+		t.Fatalf("NewSink: %v", err)
+	}
+	ks, ok := sink.(*KafkaSink)
+	if !ok {
+		t.Fatalf("expected *KafkaSink, got %T", sink)
+	}
+	_ = ks.Close()
+}
+
+func TestIsPlainBrokerList(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"host:9092", true},
+		{"host:9092,host2:9092", true},
+		{"kafka://host:9092", false},
+		{"http://host:9092", false},
+		{"host", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := isPlainBrokerList(c.in); got != c.want {
+			t.Errorf("isPlainBrokerList(%q) = %v want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNewKafkaSinkFromURLTrimsWhitespace(t *testing.T) {
+	s, err := NewKafkaSinkFromURL("kafka:// broker1:9092 ,  broker2:9092 ", DefaultAuditTopic)
+	if err != nil {
+		t.Fatalf("NewKafkaSinkFromURL: %v", err)
+	}
+	if s.topic != DefaultAuditTopic {
+		t.Errorf("topic: %q", s.topic)
+	}
+	_ = s.Close()
+}
+
+func TestNewKafkaSinkNoBrokers(t *testing.T) {
+	if _, err := NewKafkaSink(nil, ""); err == nil {
+		t.Fatal("expected error for no brokers")
+	}
+}
+
+func TestNewKafkaSinkEmptyTopicUsesDefault(t *testing.T) {
+	s, err := NewKafkaSink([]string{"broker:9092"}, "")
+	if err != nil {
+		t.Fatalf("NewKafkaSink: %v", err)
+	}
+	if s.topic != DefaultAuditTopic {
+		t.Errorf("topic: %q want %q", s.topic, DefaultAuditTopic)
+	}
+	_ = s.Close()
+}
+
+func TestKafkaSinkEmitNilWriter(t *testing.T) {
+	s := &KafkaSink{topic: "t"}
+	if err := s.Emit(context.Background(), Event{ScreenID: "s", TxID: "tx"}); err == nil {
+		t.Fatal("expected error for nil writer")
+	}
+	if s.Sent() != 0 {
+		t.Errorf("sent: %d", s.Sent())
+	}
+}
+
+func TestDBSinkCloseIsNoOp(t *testing.T) {
+	s := NewDBSink(nil)
+	if err := s.Close(); err != nil {
+		t.Errorf("close: %v", err)
+	}
+}
+
+func TestDBSinkEmitError(t *testing.T) {
+	// Use a *sql.DB backed by a connector that errors on connect, so Emit's
+	// ExecContext fails fast without a real database or driver import.
+	db := sql.OpenDB(errConnector{})
+	defer db.Close()
+	s := NewDBSink(db)
+	if err := s.Emit(context.Background(), Event{ScreenID: "s1"}); err == nil {
+		t.Fatal("expected error from failing connector")
+	}
+}
+
+type errConnector struct{}
+
+func (errConnector) Connect(_ context.Context) (driver.Conn, error) {
+	return nil, errors.New("connect failed")
+}
+func (errConnector) Driver() driver.Driver { return errDriverInstance{} }
+
+type errDriverInstance struct{}
+
+func (errDriverInstance) Open(_ string) (driver.Conn, error) {
+	return nil, errors.New("open failed")
 }

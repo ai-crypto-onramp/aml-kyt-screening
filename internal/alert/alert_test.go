@@ -133,3 +133,89 @@ func TestMemoryStoreCreateEmptyID(t *testing.T) {
 		t.Fatal("expected error for empty id")
 	}
 }
+
+func TestServiceWithNow(t *testing.T) {
+	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	s := NewService(NewMemoryStore()).
+		WithID(func() string { return "a1" }).
+		WithNow(func() time.Time { return now })
+	a, err := s.Create("", "tx1", "0xbad", "ethereum", "HIGH_RISK", "high")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if !a.CreatedAt.Equal(now) {
+		t.Errorf("CreatedAt: %v want %v", a.CreatedAt, now)
+	}
+}
+
+func TestServiceGetStoreError(t *testing.T) {
+	s := NewService(&errStore{err: errors.New("db down")})
+	if _, err := s.Get("a1"); err == nil {
+		t.Fatal("expected error from store")
+	}
+}
+
+func TestServiceAssignStoreUpdateError(t *testing.T) {
+	store := &failUpdateStore{}
+	s := NewService(store).WithID(func() string { return "a1" })
+	_, _ = s.Create("", "tx1", "0x1", "ethereum", "HIGH_RISK", "high")
+	_, err := s.Assign("a1", "analyst1")
+	if err == nil {
+		t.Fatal("expected update error")
+	}
+}
+
+func TestServiceCloseStoreUpdateError(t *testing.T) {
+	store := &failUpdateStore{}
+	s := NewService(store).WithID(func() string { return "a1" })
+	_, _ = s.Create("", "tx1", "0x1", "ethereum", "HIGH_RISK", "high")
+	_, err := s.Close("a1", "analyst1")
+	if err == nil {
+		t.Fatal("expected update error")
+	}
+}
+
+func TestServiceAssignNotFound(t *testing.T) {
+	s := NewService(NewMemoryStore())
+	_, err := s.Assign("nope", "x")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err: %v", err)
+	}
+}
+
+func TestServiceCloseNotFound(t *testing.T) {
+	s := NewService(NewMemoryStore())
+	_, err := s.Close("nope", "x")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err: %v", err)
+	}
+}
+
+type errStore struct{ err error }
+
+func (s *errStore) Create(a Alert) (Alert, error)  { return a, nil }
+func (s *errStore) Get(id string) (Alert, bool, error) {
+	return Alert{}, false, s.err
+}
+func (s *errStore) List(status string) ([]Alert, error) { return nil, nil }
+func (s *errStore) Update(a Alert) error                  { return nil }
+
+type failUpdateStore struct {
+	mem map[string]Alert
+}
+
+func (s *failUpdateStore) Create(a Alert) (Alert, error) {
+	if s.mem == nil {
+		s.mem = make(map[string]Alert)
+	}
+	s.mem[a.ID] = a
+	return a, nil
+}
+func (s *failUpdateStore) Get(id string) (Alert, bool, error) {
+	a, ok := s.mem[id]
+	return a, ok, nil
+}
+func (s *failUpdateStore) List(status string) ([]Alert, error) { return nil, nil }
+func (s *failUpdateStore) Update(a Alert) error {
+	return errors.New("update failed")
+}
